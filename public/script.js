@@ -214,13 +214,12 @@ document.addEventListener('DOMContentLoaded', () => {
             safeSetText('modal-official-metar', 'Loading METAR...');
             safeSetText('modal-taf', 'Loading TAF...');
 
-            const d = window.__awos;
-            const metar = getOfficialMetar(d);
-            const taf = d?.official?.taf?.raw || 'TAF not available';
-
-            safeSetText('modal-official-metar', metar);
-            safeSetText('modal-taf', taf);
-
+            // On modal open
+            const d = window.__awos || {};
+            safeSetText('modal-official-metar', d?.official?.metar?.raw || 'METAR not available');
+            safeSetText('modal-taf', 'TAF not available');
+            safeSetText('modal-taf', d?.official?.taf?.raw || 'TAF not available');
+            safeSetText('modal-taf-issued', d?.official?.taf?.issued || '');
         }
     });
 

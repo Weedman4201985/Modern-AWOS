@@ -335,40 +335,86 @@ const parseTgftp = (body) => {
     return { raw: raw.trim(), issued };
 };
 
-async function getWx(station, type) {
-    const s = station.toUpperCase();
-    const source = type === 'metar' ? 'metars' : 'tafs';
-    try {
-        const jsonUrl = `https://aviationweather.gov/adds/dataserver_current/httpparam?dataSource=${source}&requestType=retrieve&format=JSON&stations=${s}&hoursBeforeNow=6`;
-        const data = await fetchJSON(jsonUrl);
-        const entries = data?.data?.[source.toUpperCase()];
-        if (entries?.length) {
-            const latest = [...entries].sort((a, b) =>
-                new Date(b.issue_time || b.observation_time) - new Date(a.issue_time || a.observation_time)
-            )[0];
-            if (latest?.raw_text) return { raw: latest.raw_text, issued: latest.issue_time || latest.observation_time };
-        }
-    } catch {}
+async function getWx(station) {
+  const s = station.toUpperCase();
+  try {
+    const url = `https://aviationweather.gov/api/data/metar?ids=${s}&hours=0&order=id%2C-obs&sep=true&taf=true`;
+    const rawText = await fetchText(url);
 
-    try {
-        const txtUrl = `https://tgftp.nws.noaa.gov/data/${type === 'metar' ? 'observations/metar' : 'forecasts/taf'}/stations/${s}.TXT`;
-        const txt = await fetchText(txtUrl);
-        return parseTgftp(txt);
-    } catch {}
+    const [metarRaw, tafRaw] = rawText.split(new RegExp(`\\bTAF\\s+${s}\\b`, 'i'));
+    const metarIssued = metarRaw.match(/\b\d{6}Z\b/)?.[0] || '--';
+    const tafIssued = tafRaw?.match(/\b\d{6}Z\b/)?.[0] || '--';
 
-    return { raw: '--', issued: '--' };
+    return {
+      metar: { raw: metarRaw.trim(), issued: metarIssued },
+      taf: tafRaw
+        ? { raw: `TAF ${s} ${tafRaw.trim()}`, issued: tafIssued }
+        : { raw: 'TAF not available', issued: '--', _source: 'AWC (error)' }
+    };
+  } catch (err) {
+    console.error('Unified METAR/TAF fetch failed:', err.message);
+    return {
+      metar: { raw: '--', issued: '--' },
+      taf: { raw: 'TAF not available', issued: '--', _source: 'AWC (error)' }
+    };
+  }
 }
+
+
 
 // 👇 NEW helper to patch awosCache with official METAR + TAF
 async function upsertAwcMetarTaf(cache) {
-    try {
-        const metar = await getWx('CYTR', 'metar');
-        const taf = await getWx('CYTR', 'taf');
-        cache.official = { metar, taf };
-    } catch (err) {
-        console.error('upsertAwcMetarTaf error:', err.message);
-    }
+  try {
+    const wx = await getWx('CYTR'); // returns { metar, taf }
+    cache.official ??= {};
+    cache.official.metar = wx.metar;
+    cache.official.taf = wx.taf;
+  } catch (err) {
+    console.error('AWOS patch error:', err.message);
+  }
 }
+
+
+
+// server.js (Node 18+ with global fetch)
+const AWC_BASE =
+    'https://aviationweather.gov/adds/dataserver_current/httpparam';
+
+async function fetchLatestTaf(station = 'CYTR') {
+    const url = `${AWC_BASE}?datasource=tafs&requestType=retrieve&format=JSON&mostRecent=true&hoursBeforeNow=24&stationString=${encodeURIComponent(station)}`;
+
+    const res = await fetch(url, { headers: { accept: 'application/json' } });
+    if (!res.ok) throw new Error(`AWC TAF fetch failed: ${res.status}`);
+    const json = await res.json();
+
+    const taf = json?.data?.TAF?.[0];
+    if (!taf?.raw_text) throw new Error('No TAF in AWC response');
+
+    return {
+        raw: formatTaf(taf.raw_text),
+        issued: toZulu(taf.issue_time || taf.bulletin_time || taf.recv_time),
+        validFrom: toZulu(taf.valid_time_from),
+        validTo: toZulu(taf.valid_time_to),
+        _source: 'AWC',
+    };
+}
+
+function formatTaf(raw) {
+    // Add line breaks for readability in your modal
+    return raw
+        .replace(/\s+/g, ' ') // normalize spacing
+        .replace(/\b(BECMG|TEMPO|PROB\d{2}|FM\d{6})\b/g, '\n$1')
+        .replace(/\s+RMK\s+/g, '\nRMK ');
+}
+
+function toZulu(s) {
+    if (!s) return undefined;
+    const d = new Date(s);
+    if (isNaN(d)) return s;
+    // Example: 2025-08-10 05:00Z
+    return d.toISOString().replace('T', ' ').slice(0, 16) + 'Z';
+}
+
 
 function calculateHumidex(tempC, dewPointC) {
     try {
@@ -399,6 +445,27 @@ function parseWindVariabilityFromMetar(metar) {
         if (m) return `${m[1]}° to ${m[2]}°`;
     } catch {}
     return '--';
+}
+
+// Simple in-memory cache
+let tafCache = { station: 'CYTR', data: null, fetchedAt: 0 };
+const TAF_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+async function getCachedTaf(station = 'CYTR') {
+    const now = Date.now();
+    const fresh = tafCache.data && (now - tafCache.fetchedAt) < TAF_TTL_MS && tafCache.station === station;
+    if (fresh) return tafCache.data;
+
+    try {
+        const taf = await fetchLatestTaf(station);
+        tafCache = { station, data: taf, fetchedAt: now };
+        return taf;
+    } catch (err) {
+        console.error('TAF refresh failed:', err.message);
+        // Fall back to last known TAF if available
+        if (tafCache.data) return tafCache.data;
+        return { raw: 'TAF not available', issued: undefined, _source: 'AWC (error)' };
+    }
 }
 
 async function fetchAWOSData() {
@@ -566,51 +633,60 @@ async function fetchAWOSData() {
 setInterval(fetchAWOSData, 60000);
 fetchAWOSData();
 
+
+
 app.get('/latest-awos', async (req, res) => {
-    try {
-        if (!Object.keys(awosCache).length) {
-            return res.status(503).json({ error: 'AWOS data not yet loaded' });
-        }
-
-        await upsertAwcMetarTaf(awosCache); // ✅ Patch in the official data
-
-        res.set('Cache-Control', 'no-store');
-
-        const reordered = {
-            serverTime: awosCache.serverTime,
-            reportTime: awosCache.reportTime,
-            station: awosCache.station,
-            rawReport: awosCache.rawReport,
-            official: awosCache.official, // 👈 Now appears right below rawReport
-            cloud: awosCache.cloud,
-            presentWeather: awosCache.presentWeather,
-            temperature: awosCache.temperature,
-            dewPoint: awosCache.dewPoint,
-            relativeHumidity: awosCache.relativeHumidity,
-            spread: awosCache.spread,
-            humidex: awosCache.humidex,
-            windChill: awosCache.windChill,
-            visibility: awosCache.visibility,
-            rvrRWY24: awosCache.rvrRWY24,
-            wind: awosCache.wind,
-            altimeter: awosCache.altimeter,
-            mslRaw: awosCache.mslRaw,
-            stationPressure: awosCache.stationPressure,
-            tendency: awosCache.tendency,
-            pressureAltitude: awosCache.pressureAltitude,
-            densityAltitude: awosCache.densityAltitude,
-            lightning: awosCache.lightning,
-            closestStrike: awosCache.closestStrike,
-            rawXml: awosCache.rawXml
-        };
-
-        res.json(reordered);
-
-    } catch (e) {
-        console.error('latest-awos error:', e);
-        res.status(502).json({ error: 'AWOS + METAR/TAF fetch failed' });
+  try {
+    if (!Object.keys(awosCache).length) {
+      return res.status(503).json({ error: 'AWOS data not yet loaded' });
     }
+
+    // Patch in official METAR and TAF
+    await upsertAwcMetarTaf(awosCache);
+
+    // Reorder keys into new object
+    const reorderedBase = {
+      serverTime: awosCache.serverTime,
+      reportTime: awosCache.reportTime,
+      station: awosCache.station,
+      rawReport: awosCache.rawReport,
+      official: awosCache.official,
+      cloud: awosCache.cloud,
+      presentWeather: awosCache.presentWeather,
+      temperature: awosCache.temperature,
+      dewPoint: awosCache.dewPoint,
+      relativeHumidity: awosCache.relativeHumidity,
+      spread: awosCache.spread,
+      humidex: awosCache.humidex,
+      windChill: awosCache.windChill,
+      visibility: awosCache.visibility,
+      rvrRWY24: awosCache.rvrRWY24,
+      wind: awosCache.wind,
+      altimeter: awosCache.altimeter,
+      mslRaw: awosCache.mslRaw,
+      stationPressure: awosCache.stationPressure,
+      tendency: awosCache.tendency,
+      pressureAltitude: awosCache.pressureAltitude,
+      densityAltitude: awosCache.densityAltitude,
+      lightning: awosCache.lightning,
+      closestStrike: awosCache.closestStrike,
+      rawXml: awosCache.rawXml
+    };
+
+    res.set('Cache-Control', 'no-store');
+    res.json(reorderedBase); // ✅ Only call once
+
+  } catch (e) {
+    console.error('latest-awos error:', e);
+    res.status(502).json({ error: 'AWOS + METAR/TAF fetch failed' });
+  }
 });
+
+// Refresh every 10 minutes, plus on startup
+async function warmTaf() { tafCache.data = await fetchLatestTaf(tafCache.station); tafCache.fetchedAt = Date.now(); }
+setInterval(() => warmTaf().catch(()=>{}), 10 * 60 * 1000);
+warmTaf().catch(()=>{});
+
 app.get('/raw-xml', (req, res) => {
     if (awosCache.rawXml) {
         res.set('Content-Type', 'application/xml');

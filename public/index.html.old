@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Modern AWOS</title>
+    <link rel="stylesheet" href="style.css" />
+    <!-- Prism.js Theme (Coy is clean and modern) -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.27.0/themes/prism-coy.min.css" rel="stylesheet" />
+    <!-- Prism.js Core -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.27.0/prism.min.js"></script>
+    <!-- XML Language Component -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.27.0/components/prism-xml.min.js"></script>
+
+</head>
+<body>
+<div class="refresh-wrapper">
+    <!-- Raw XML button on the left -->
+    <button id="raw-xml-button" class="raw-button" onclick="showModal()">View Raw XML</button>
+
+    <!-- Countdown and Refresh Now stacked on the right -->
+    <div class="refresh-container">
+        <div id="refresh-label">Next refresh in <span id="countdown">60</span>s</div>
+        <button id="manual-refresh" class="refresh-button">Refresh Now</button>
+    </div>
+</div>
+
+
+<header>
+    <h1>AWOS Weather Station</h1>
+    <div class="header-top">
+        <div class="station-id">
+            <p><strong>ID:</strong> <span id="station-id">--</span></p>
+            <p><strong>Elevation:</strong> <span id="station-elevation">--</span></p>
+        </div>
+        <div class="lat-long">
+            <p><strong>Latitude:</strong> <span id="station-lat">--</span></p>
+            <p><strong>Longitude:</strong> <span id="station-long">--</span></p>
+        </div>
+    </div>
+    <div class="header-bottom">
+        <div class="refresh-row">
+            <div class="server-report-time">
+                <p><strong>Server Time:</strong> <span id="server-time">--</span></p>
+            </div>
+            <div class="awos-report-time">
+                <p><strong>AWOS Report Time:</strong> <span id="report-time">--</span></p>
+            </div>
+        </div>
+    </div>
+</header>
+
+<main>
+    <section id="report-info">
+        <h2>Report</h2>
+        <p><strong>Raw METAR:</strong> <span id="raw-report">--</span></p>
+    </section>
+
+    <section id="sky-info">
+        <h2>Sky & Weather</h2>
+        <p><strong>Cloud:</strong> <span id="cloud">--</span></p>
+        <p><strong>Present Weather:</strong> <span id="present-weather">--</span></p>
+    </section>
+
+    <section id="weather-conditions">
+        <h2>Current Conditions</h2>
+        <p><strong>Temperature:</strong> <span id="temperature">--</span> °C</p>
+        <p><strong>Dew Point:</strong> <span id="dew-point">--</span> °C</p>
+        <p><strong>Spread:</strong> <span id="spread">--</span> °C</p>
+        <p><strong>Humidex:</strong> <span id="humidex">--</span></p>
+        <p><strong>Wind Chill:</strong> <span id="wind-chill">--</span></p>
+    </section>
+
+    <section id="visibility-info">
+        <h2>Visibility</h2>
+        <p><strong>SM:</strong> <span id="visibility-sm">--</span></p>
+        <p><strong>M:</strong> <span id="visibility-m">--</span></p>
+        <p><strong>RVR RWY24:</strong> <span id="rvr-rwy24">--</span></p>
+    </section>
+
+    <section id="pressure-info">
+        <h2>Pressure</h2>
+        <p><strong>Altimeter:</strong> <span id="altimeter">--</span> inHg</p>
+        <p><strong>MSL Pressure (Raw):</strong> <span id="msl-raw"></span> hPa</p>
+
+        <div>
+            <strong>MSL Pressure (CF Weather Office-Truncated):</strong>
+            <span id="msl-truncated-container" style="display: inline-flex; align-items: center; gap: 4px;">
+            <span id="msl-truncated"></span> hPa
+            <span class="warning-icon" title="Truncated value — may differ from raw data">⚠️</span>
+        </span>
+        </div>
+
+        <p><strong>Station Pressure:</strong> <span id="station-pressure">--</span> hPa</p>
+
+
+        <p><strong>Tendency (3hr):</strong> <span id="tendency-3hr">--</span></p>
+        <p><strong>Tendency (15min):</strong> <span id="tendency-15min">--</span></p>
+        <p><strong>Tendency (1hr):</strong> <span id="tendency-1hr">--</span></p>
+    </section>
+
+    <section id="wind-info">
+        <h2>Wind</h2>
+        <p><strong>2-min:</strong> <span id="wind-2min">--</span></p>
+        <p><strong>10-min:</strong> <span id="wind-10min">--</span></p>
+        <p><strong>60-min:</strong> <span id="wind-60min">--</span></p>
+        <p><strong>Variable Direction:</strong> <span id="wind-variable">--</span></p>
+        <p><strong>Gust Time:</strong> <span id="gust-time">--</span></p>
+    </section>
+
+    <section id="altitude-info">
+        <h2>Altitude</h2>
+        <p><strong>Pressure Altitude:</strong> <span id="pressure-altitude">--</span> ft</p>
+        <p><strong>Density Altitude:</strong> <span id="density-altitude">--</span> ft</p>
+    </section>
+
+    <section id="lightning-info">
+        <h2>Lightning</h2>
+        <p><strong>Strikes:</strong> <span id="lightning">--</span></p>
+    </section>
+</main>
+
+<footer>
+    <p>AWOS Modern Page | Hosted externally</p>
+</footer>
+
+<!-- Raw XML Modal -->
+<div id="xmlModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <h2>Raw XML Data</h2>
+        <pre><code id="xmlContent" class="language-xml">Loading...</code></pre>
+    </div>
+</div>
+
+<script src="script.js.old"></script>
+</body>
+</html>
+
