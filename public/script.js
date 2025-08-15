@@ -1,4 +1,5 @@
 let countdown = 60;
+let cachedAutoMetar = '';
 
 // Controls
 const countdownDisplay = document.getElementById('countdown');
@@ -25,7 +26,6 @@ function toDMS(deg, isLat) {
     const hemi = isLat ? (deg >= 0 ? 'N' : 'S') : (deg >= 0 ? 'E' : 'W');
     return `${d}°${String(m).padStart(2,'0')}′${String(s).padStart(2,'0')}″${hemi}`;
 }
-
 function calcWetBulb(tempC, dewC) {
     if (typeof tempC !== 'number' || typeof dewC !== 'number') return '--';
     const es = 6.112 * Math.exp((17.67 * tempC) / (tempC + 243.5));
@@ -50,13 +50,6 @@ async function fetchAWOS() {
     }
     countdown = 60;
 }
-
-function getOfficialMetar(data) {
-    return data?.official?.metar?.raw || 'METAR not available';
-}
-
-let cachedAutoMetar = '';
-
 function updateUI(data) {
     // Header
     safeSetText('station-id', data.station.id);
@@ -116,7 +109,6 @@ function updateUI(data) {
     safeSetText('lightning', data.lightning);
     safeSetText('closest-strike', data.closestStrike || 'n/a');
 }
-
 function updateCountdown() {
     countdownDisplay.textContent = `${countdown}`;
     countdown--;
@@ -125,12 +117,8 @@ function updateCountdown() {
         countdown = 60;
     }
 }
-
-function escapeXml(xml) {
-    return xml
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
+function getOfficialMetar(data) {
+    return data?.official?.metar?.raw || 'METAR not available';
 }
 
 function showModal() {
@@ -146,6 +134,15 @@ function showModal() {
             safeSetText('xmlContent', 'Failed to load XML.');
             console.error('Error fetching raw XML:', err);
         });
+}
+function escapeXml(xml) {
+    return xml
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+function closeModal() {
+    document.getElementById('xmlModal').style.display = 'none';
 }
 
 // Full data modal content
@@ -188,13 +185,9 @@ function openFullDataModal() {
     document.getElementById('fullDataModal').style.display = 'block';
 }
 
-function closeModal() {
-    document.getElementById('xmlModal').style.display = 'none';
-}
-
+setInterval(updateCountdown, 1000);
 // Event wiring
 refreshButton.addEventListener('click', fetchAWOS);
-setInterval(updateCountdown, 1000);
 darkToggle.addEventListener('click', () => {
     document.body.classList.toggle('dark');
 });
@@ -242,6 +235,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
 // Initial load
 fetchAWOS();
-
