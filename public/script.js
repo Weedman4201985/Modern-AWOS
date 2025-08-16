@@ -16,6 +16,15 @@ function safeSetHtml(id, html) {
     if (el) el.innerHTML = html;
 }
 
+function parseAWOSTime(str) {
+    // Format: YYYYMMDD.HHMMSS
+    const match = str.match(/^(\d{4})(\d{2})(\d{2})\.(\d{2})(\d{2})(\d{2})$/);
+    if (!match) return new Date();
+    const [, y, m, d, h, min, s] = match.map(Number);
+    return new Date(Date.UTC(y, m - 1, d, h, min, s));
+}
+
+
 function toDMS(deg, isLat) {
     if (typeof deg !== 'number') return '--';
     const abs = Math.abs(deg);
@@ -44,12 +53,24 @@ async function fetchAWOS() {
         const res = await fetch('/latest-awos');
         const data = await res.json();
         updateUI(data);
-        window.__awos = data; // for full data modal
+        window.__awos = data;
+
+        // ⏱️ Smart countdown based on report time
+        const reportTimeStr = data.reportTime; // e.g., "20250816.181212"
+        const reportTime = parseAWOSTime(reportTimeStr);
+        const nextExpected = new Date(reportTime.getTime() + 60000); // +60 sec
+        const now = new Date();
+        const delayMs = Math.max(nextExpected - now, 10000); // minimum 10s
+
+        countdown = Math.floor(delayMs / 1000);
+        setTimeout(fetchAWOS, delayMs);
     } catch (err) {
         console.error('AWOS fetch failed:', err);
+        countdown = 60; // fallback
+        setTimeout(fetchAWOS, 60000);
     }
-    countdown = 60;
 }
+
 function updateUI(data) {
     // Header
     safeSetText('station-id', data.station.id);

@@ -1,4 +1,4 @@
-require('./resources/logger.js.old');// This overrides console methods
+require('./server-config/logger.js');// This overrides console methods
 
 
 const express = require('express');
@@ -309,7 +309,8 @@ async function fetchAWOSData(){
     }
 }
 
-setInterval(fetchAWOSData, 60000);
+setInterval(fetchAWOSData, 60000); // Refresh every 30 secs
+
 setInterval(() => warmTaf().catch(()=>{}), 10 * 60 * 1000);
 
 fetchAWOSData();
