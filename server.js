@@ -1,3 +1,6 @@
+require('./resources/logger.js.old');// This overrides console methods
+
+
 const express = require('express');
 const path = require('path');
 const axios = require('axios');
@@ -144,7 +147,7 @@ function parseWindVariabilityFromMetar(metar) {
     } catch {}
     return '--';
 }
-async function fetchAWOSData() {
+async function fetchAWOSData(){
     try {
         const session = axios.create({
             auth: {

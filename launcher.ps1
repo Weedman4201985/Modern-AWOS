@@ -1,4 +1,10 @@
-Import-Module "$PSScriptRoot\logger.psm1"
+Import-Module "$PSScriptRoot\server-config\logger.psm1"
+$loggerModulePath = Join-Path $PSScriptRoot "server-config\logger.psm1"
+if (Test-Path $loggerModulePath) {
+    Import-Module $loggerModulePath -Force
+} else {
+    Write-Host "Logger module not found at $loggerModulePath" -ForegroundColor Red
+}
 
 $scriptPath = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $PSCommandPath }
 
@@ -29,34 +35,74 @@ function Get-PortStatus {
 }
 
 function Show-ServerMenu {
+    param(
+        [Parameter()][string]$ServerUrl = 'http://localhost:3000',
+        [Parameter()][string]$AWOSXMLUrl = 'http://localhost:3000/latest-awos'
+    )
+
+    $uri  = [Uri]$ServerUrl
+    $port = $uri.Port
+
+    $statusInfo   = Get-ServerStatus -Url $ServerUrl
+    $AWOSXMLInfo  = Get-ServerStatus -Url $AWOSXMLUrl
+    $portInfo     = Get-PortStatus -Port $port
+
     do {
         Clear-Host
+        Write-Host "======Server Status====== " -ForegroundColor Cyan
+        Write-Host ("Server Status: {0}" -f $statusInfo.Status) -ForegroundColor $statusInfo.Color
+        Write-Host ("AWOS XML Data Status: {0}" -f $AWOSXMLInfo.Status) -ForegroundColor $AWOSXMLInfo.Color
+        Write-Host ("Port {0}: {1}" -f $port, $portInfo.Status) -ForegroundColor $portInfo.Color
+        Write-Host "======================== " -ForegroundColor Cyan
+        Write-Host ("Server URL: {0}" -f $ServerUrl)
+        Write-Host ("Latest AWOS XML Data URL: {0}" -f $AWOSXMLUrl)
+        Write-Host "======================== " -ForegroundColor Cyan
+
+        Write-Host " " -ForegroundColor $statusInfo.Color
+
         Write-Host "=== Server Control Menu ===" -ForegroundColor Cyan
         Write-Host "1. Launch Server"
         Write-Host "2. Shutdown Server"
         Write-Host "3. Restart Server"
-        Write-Host "4. Back to Main Menu"
+        Write-Host '---------------------------------'
+        Write-Host "4. Open Browser"
+        Write-Host "5. View Raw AWOS XML"
+        Write-Host '---------------------------------'
+        Write-Host "6. Return to main menu"
         Write-Host ''
 
-        $choice = (Read-Host "Select an option (1-4)").Trim()
+        $choice = (Read-Host "Select an option (1-6)").Trim()
 
         switch ($choice) {
             '1' {
-                Start-Companion -ScriptName "start-server.ps1" -ActionLabel "Launch Server"
+                Start-Companion -ScriptName "server-config\start-server.ps1" -ActionLabel "Launch Server"
                 Write-Host "`nPress Enter to return to Server Menu..."
                 [void](Read-Host)
             }
             '2' {
-                Start-Companion -ScriptName "shutdown-server.ps1" -ActionLabel "Shutdown Server"
+                Start-Companion -ScriptName "server-config\shutdown-server.ps1" -ActionLabel "Shutdown Server"
                 Write-Host "`nPress Enter to return to Server Menu..."
                 [void](Read-Host)
             }
             '3' {
-                Start-Companion -ScriptName "restart-server.ps1" -ActionLabel "Restart Server"
+                Start-Companion -ScriptName "server-config\restart-server.ps1" -ActionLabel "Restart Server"
                 Write-Host "`nPress Enter to return to Server Menu..."
                 [void](Read-Host)
             }
             '4' {
+                Start-Companion -ScriptName "server-config\open-browser.ps1" -ActionLabel "Open Web Server"
+                Write-Host "`nPress Enter to return to Server Menu..."
+                [void](Read-Host)
+            }
+            '5' {
+                Start-Companion -ScriptName "server-config\show-raw-AWOS-xml.ps1" -ActionLabel "View RAW AWOS XML
+                Data"
+                Write-Log -Message "Loading XML..." -Level "INFO" -Path $LauncherLog
+                Write-Host "`nPress Enter to return to Server Menu..."
+                [void](Read-Host)
+            }
+
+            '6' {
                 Write-Host "Returning to main menu..." -ForegroundColor Cyan
                 return
             }
@@ -70,8 +116,6 @@ function Show-ServerMenu {
 
 function Show-Menu {
     param(
-        [Parameter()][string]$ServerUrl = 'http://localhost:3000',
-        [Parameter()][string]$AWOSXMLUrl = 'http://localhost:3000/latest-awos',
         [Parameter()][string]$Title = 'AWOS Launcher Dashboard'
     )
 
@@ -83,26 +127,16 @@ function Show-Menu {
     $uri  = [Uri]$ServerUrl
     $port = $uri.Port
 
-    $statusInfo   = Get-ServerStatus -Url $ServerUrl
-    $AWOSXMLInfo  = Get-ServerStatus -Url $AWOSXMLUrl
-    $portInfo     = Get-PortStatus -Port $port
-
     Write-Host ("=== {0} ===" -f $Title) -ForegroundColor Cyan
-    Write-Host ("Server Status: {0}" -f $statusInfo.Status) -ForegroundColor $statusInfo.Color
-    Write-Host ("AWOS XML Data Status: {0}" -f $AWOSXMLInfo.Status) -ForegroundColor $AWOSXMLInfo.Color
-    Write-Host ("Port {0}: {1}" -f $port, $portInfo.Status) -ForegroundColor $portInfo.Color
-    Write-Host ''
-    Write-Host ("Server URL: {0}" -f $ServerUrl)
-    Write-Host ("Latest AWOS XML Data URL: {0}" -f $AWOSXMLUrl)
     Write-Host ''
 
-   $menuItems = @(
-    @{ Key='1'; Label='Server Controls'    ; Script=$null },
-    @{ Key='2'; Label='Open Browser'       ; Script='open-browser.ps1' },
-    @{ Key='3'; Label='View Logs'          ; Script=$null },
-    @{ Key='4'; Label='View Raw AWOS XML'  ; Script=$null },
-    @{ Key='5'; Label='Exit'               ; Script=$null }
-)
+    Write-Host ''
+
+    $menuItems = @(
+        @{ Key='1'; Label='Server Controls'    ; Script=$null },
+        @{ Key='2'; Label='View Logs'          ; Script=$null },
+        @{ Key='3'; Label='Exit'               ; Script=$null }
+    )
 
     Write-Host '---------- MAIN MENU ------------'
     foreach ($i in $menuItems) {
@@ -121,17 +155,13 @@ function Invoke-MenuAction {
 
     switch ($Choice) {
         '1' { Show-ServerMenu }
-        '2' { & "open-browser.ps1" }
-        '3' { Show-LogViewer }
-        '4' { Show-RawXML -Url $AWOSXMLUrl }
-        '5' { Write-Host "Exiting..." }
+        '2' { Show-LogViewer }
+        '3' { Write-Host "Exiting..." }
         default {
             Write-Host "Invalid selection. Try again." -ForegroundColor Yellow
             Start-Sleep -Milliseconds 900
         }
     }
-
-
 }
 
 function Start-Companion {
@@ -151,6 +181,7 @@ function Start-Companion {
 }
 
 function Show-RawXML {
+
     Clear-Host
     Write-Host "=== AWOS Raw XML Viewer ===" -ForegroundColor Cyan
     try {
@@ -160,30 +191,31 @@ function Show-RawXML {
     } catch {
         Write-Host "`n[Error] Failed to retrieve XML data." -ForegroundColor Red
         Write-Log -Message "Failed to retrieve XML data" -Level "ERROR" -Path $LauncherLog
-        Write-Log -Message "Failed to retrieve XML data" -Level "ERROR" -Path $ErrorLog
+        Write-Log -Message "Failed to retrieve XML data" -Level "ERROR" -Path $psErrorLog
 
     }
     Write-Host "`nPress Enter to return to menu..."
     [void](Read-Host)
 }
 
-function Show-LogTail {
-    param(
-        [Parameter(Mandatory)][string]$Name,
-        [Parameter(Mandatory)][string]$Path,
-        [Parameter()][int]$TailLineCount = 20
+function Get-ValidLogFiles {
+    $logList = @()
+
+    $logSources = @(
+        @{ Name = "Launcher Log"; Path = $Global:LauncherLog },
+        @{ Name = "Server Log"; Path = $Global:ServerLog },
+        @{ Name = "Shutdown Log"; Path = $Global:ShutdownLog },
+        @{ Name = "PowerShell Error Log"; Path = $Global:psErrorLog },
+        @{ Name = "Node Error Log"; Path = $Global:nodeErrorLog }
     )
 
-    if (Test-Path $Path)
-    {
-        Write-Host "`n--- Showing last $TailLineCount lines of $Name ---" -ForegroundColor Yellow
-        Get-Content -Path $Path -Tail $TailLineCount
+    foreach ($log in $logSources) {
+        if (-not [string]::IsNullOrWhiteSpace($log.Path)) {
+            $logList += $log
+        }
     }
-    else
-    {
-        Write-Host "`n[Error] Log file not found: $Path" -ForegroundColor Red
-        Write-Log -Message "Log file not found: $Path" -Level "ERROR" -Path $ErrorLog
-    }
+
+    return $logList
 }
 
 function Show-LogViewer {
@@ -194,6 +226,13 @@ function Show-LogViewer {
         @{ Name = "Server Log"; Path = $ServerLog },
         @{ Name = "Shutdown Log"; Path = $ShutdownLog }
     )
+
+    $LogFiles | ForEach-Object {
+        Write-Host "Log: $($_.Name) => $($_.Path)"
+        if (-not (Test-Path $_.Path)) {
+            Write-Host "[Warning] File not found: $($_.Path)" -ForegroundColor Yellow
+        }
+    }
 
     do {
         Clear-Host
@@ -208,7 +247,6 @@ function Show-LogViewer {
         $BackOption = $LogFiles.Count + 3
 
         Write-Host "$CombinedLogOption. View Combined Error Log"
-
         Write-Host "$ClearOption. Clear a Log"
         Write-Host "$BackOption. Back to Main Menu"
 
@@ -225,6 +263,9 @@ function Show-LogViewer {
         if ($ChoiceInt -ge 1 -and $ChoiceInt -le $LogFiles.Count) {
             $index = $ChoiceInt - 1
             $logInfo = $LogFiles[$index]
+            Write-Host "Calling Show-LogTail with:"
+            Write-Host "Name: $($logInfo.Name)"
+            Write-Host "Path: $($logInfo.Path)"
             Show-LogTail -Name $logInfo.Name -Path $logInfo.Path -TailLineCount $TailLineCount
             Write-Host "`nPress Enter to return to log menu..."
             [void](Read-Host)
@@ -234,7 +275,7 @@ function Show-LogViewer {
                 Show-ClearLogsMenu -LogFiles $LogFiles
             } catch {
                 Write-Host "Error opening Clear Logs menu: $_" -ForegroundColor Red
-                Write-Log -Message "Error opening Clear Logs menu: $_" -Level "ERROR" -Path $ErrorLog}
+                Write-Log -Message "Error opening Clear Logs menu: $_" -Level "ERROR" -Path $psErrorLog}
         }
         elseif ($ChoiceInt -eq $CombinedLogOption) {
             Show-CombinedErrorLog
@@ -249,6 +290,30 @@ function Show-LogViewer {
             Start-Sleep -Milliseconds 900
         }
     } while ($true)
+}
+
+function Show-LogTail {
+    param (
+        [string]$Name,
+        [string]$Path,
+        [int]$TailLineCount = 20
+    )
+
+    Write-Host "`n--- $Name ---" -ForegroundColor Cyan
+    Write-Host "Path: $Path"
+
+    if (-not (Test-Path $Path)) {
+        Write-Host "[Error] Log file not found: $Path" -ForegroundColor Red
+        return
+    }
+
+    $lines = Get-Content $Path -ErrorAction Stop | Select-Object -Last $TailLineCount
+
+    if ($lines.Count -eq 0) {
+        Write-Host "[Info] Log is empty." -ForegroundColor Yellow
+    } else {
+        $lines | ForEach-Object { Write-Host $_ }
+    }
 }
 
 function Clear-LogFile {
@@ -275,12 +340,7 @@ function Clear-LogFile {
 
 function Show-ClearLogsMenu {
     param (
-        [array]$LogFiles = @(
-            @{ Name = "Launcher Log"; Path = $LauncherLog },
-            @{ Name = "Server Log"; Path = $ServerLog },
-            @{ Name = "Shutdown Log"; Path = $ShutdownLog },
-            @{ Name = "Error Log"; Path = $ErrorLog }
-        )
+        [array]$LogFiles = $(Get-ValidLogFiles)
     )
 
     do {
@@ -290,6 +350,7 @@ function Show-ClearLogsMenu {
         for ($i = 0; $i -lt $LogFiles.Count; $i++) {
             Write-Host "$($i + 1). Clear $($LogFiles[$i].Name)"
         }
+
         $clearAllOption = $LogFiles.Count + 1
         $backOption = $LogFiles.Count + 2
 
@@ -298,17 +359,20 @@ function Show-ClearLogsMenu {
 
         $logChoice = Read-Host "Select an option (1-$backOption)"
 
-        if ($logChoice -in @('1','2','3','4')) {
-            $index = [int]$logChoice - 1
-            $logPath = $LogFiles[$index].Path
-            $logName = $LogFiles[$index].Name
-            Clear-LogFile -LogPath $logPath -LogName $logName
-        } elseif ($logChoice -eq "$clearAllOption") {
-            Clear-AllLogs
-        } elseif ($logChoice -eq "$backOption") {
-            break
+        if ($logChoice -match '^\d+$') {
+            $choiceInt = [int]$logChoice
+            if ($choiceInt -ge 1 -and $choiceInt -le $LogFiles.Count) {
+                $log = $LogFiles[$choiceInt - 1]
+                Clear-LogFile -LogPath $log.Path -LogName $log.Name
+            } elseif ($choiceInt -eq $clearAllOption) {
+                Clear-AllLogs
+            } elseif ($choiceInt -eq $backOption) {
+                break
+            } else {
+                Write-Host "Invalid selection." -ForegroundColor Red
+            }
         } else {
-            Write-Host "Invalid selection." -ForegroundColor Red
+            Write-Host "Invalid input." -ForegroundColor Yellow
         }
 
         Write-Host "`nPress Enter to return to Clear Logs menu..."
@@ -317,12 +381,7 @@ function Show-ClearLogsMenu {
 }
 
 function Clear-AllLogs {
-    $logFiles = @(
-        @{ Name="Launcher Log"; Path=$LauncherLog },
-        @{ Name="Server Log"; Path=$ServerLog },
-        @{ Name="Shutdown Log"; Path=$ShutdownLog },
-        @{ Name="Error Log"; Path=$ErrorLog }
-    )
+    $logFiles = Get-ValidLogFiles
 
     $confirm = Read-Host "Are you sure you want to clear ALL logs? Type YES to confirm"
     if ($confirm -eq 'YES') {
@@ -330,10 +389,10 @@ function Clear-AllLogs {
             if (Test-Path $log.Path) {
                 Clear-Content -Path $log.Path
                 Write-Host "[Cleared] $($log.Name)" -ForegroundColor Green
-                Write-Log -Message "Cleared log: $($log.Name)" -Level "INFO" -Path $LauncherLog
+                Write-Log -Message "Cleared log: $($log.Name)" -Level "INFO" -Path $Global:LauncherLog
             } else {
                 Write-Host "[Missing] $($log.Name) not found." -ForegroundColor Yellow
-                Write-Log -Message "Log not found during clear-all: $($log.Path)" -Level "WARN" -Path $ErrorLog
+                Write-Log -Message "Log not found during clear-all: $($log.Path)" -Level "WARN" -Path $Global:psErrorLog
             }
         }
     } else {
@@ -382,11 +441,11 @@ function Show-CombinedErrorLog {
 
 do {
     Show-Menu
-    $choice = Read-Host "Select an option (1-5)"
+    $choice = Read-Host "Select an option (1-3)"
     Invoke-MenuAction -Choice $choice
 
-    if ($choice -ne '5') {
+    if ($choice -ne '3') {
         Write-Host "`nPress Enter to return to menu..."
         [void](Read-Host)
     }
-} while ($choice -ne '5')
+} while ($choice -ne '3')

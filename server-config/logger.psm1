@@ -34,3 +34,4 @@ function Write-Log {
     Add-Content -Path $Path -Value $entry
 }
 
+Export-ModuleMember -Function Write-Log
