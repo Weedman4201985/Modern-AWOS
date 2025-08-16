@@ -1,0 +1,36 @@
+const fs = require('fs');
+const path = require('path');
+
+// Define log directory
+const logDir = path.join(__dirname, 'logs');
+if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir);
+}
+
+// Define log files
+const serverLog = path.join(logDir, 'server.log');
+const errorLog = path.join(logDir, 'error-powershell.log');
+
+// Helper to write to log files
+function writeLog(file, message) {
+    const timestamp = new Date().toISOString();
+    fs.appendFileSync(file, `[${timestamp}] ${message}\n`);
+}
+
+// Override console methods
+console.log = (...args) => {
+    const message = args.join(' ');
+    writeLog(serverLog, message);
+    process.stdout.write(message + '\n');
+};
+
+console.error = (...args) => {
+    const message = args.join(' ');
+    writeLog(errorLog, message);
+    process.stderr.write(message + '\n');
+};
+
+module.exports = {
+    log: console.log,
+    error: console.error
+};
