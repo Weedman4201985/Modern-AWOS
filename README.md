@@ -166,7 +166,7 @@ Dark Mode:
 ![Dark_Mode](https://github.com/user-attachments/assets/cc55218a-1572-4958-a28e-efefdc6fa032)
 
 
-📸 Launcher Screenshots
+## 📸 Launcher Screenshots
 
 
 Main Menu:
