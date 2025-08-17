@@ -48,59 +48,100 @@ A real-time weather dashboard for CYTR (Trenton Airport), built with Node.js and
 
 ## 📦 Installation
 
- *PREREQUISITES*
+ ### PREREQUISITES
 
   In order to successfully run the server you need:
+  
   -the latest version of Powershell(v7)
-  -latest LTS version of Node.js with Express. 
-  -npm. If npm is missing it can be installed manually.
-  -Winston package/module for logging purposes.
+  
+  -latest LTS version of Node.js with Express 
+  
+  -npm. If npm is missing it can be installed manually
+  
+  -Winston package/module for logging purposes
   
 
-To install the server using Bash:
+### To install the server using Bash:
 
 -git clone https://github.com/Weedman4201985/Modern-AWOS.git
+
 -cd Modern-AWOS
+
 -npm install
+
 -Install prerequisites
 
-To run the server using BASH:
+
+
+### To run the server using BASH:
+
 -Navigate to the Modern-AWOS root folder
+
 -Type node ./server.js
 
-To install and run the server using the built in Powershell launcher/Dashboard:
+
+
+
+### To install and run the server using the built in Powershell launcher/Dashboard:
 
 -git clone https://github.com/Weedman4201985/Modern-AWOS.git
+
 -Install prerequisites
--Open powershell, type: cd Modern-AWOS(or wherever you cloned it to)
-                         ./launcher.ps1                         
+
+-Open powershell, type: 
+
+  -cd Modern-AWOS(or wherever you cloned it to)
+
+  ./launcher.ps1 
+
+  
 -In the Dashboard
-  Choose option 1(Server Control Options)
-    -Choose option 1 (Launch server)                    
+
+  -Choose option 1(Server Control Options), then
+  
+  -Choose option 1 (Launch server)   
+
+
+  
                     
-Once installed, you can create a desktop link to the launcher/dashboard(RECOMMENDED)
+## Create a desktop link to the launcher/dashboard(RECOMMENDED)
+
 -Create a Desktop shorcut
+
 -Set TARGET to "C:\Path\to\pwsh.exe" -ExecutionPolicy Bypass -NoExit -File "Path/to/the/launcher/launcher.ps1"
 
 
 
 
-To view the server and any other server routes type the following into your web browser of choice:
+
+## To view the server and any other server routes type the following into your web browser of choice:
 
 localhost:3000 - Main AWOS page
+
 localhost:3000/latest-awos - Latest RAW XML data report from the XMCN64 CYTR MET bulletin
+
 localhost:3000/awos-history - Displays a history of parsed XML data reports(up to 24)
-localhost:3000/raw-xml(not currently functioning correctly) - Displays parsed XML data in an attempt to remove placeholders and garbage from the XML report
+
+localhost:3000/raw-xml(not currently functioning correctly) - Displays parsed XML data in an attempt to remove 
+
+placeholders and garbage from the XML report
 
 
 
 
 
 🧪 Development Notes
+
 -Built in ~36 hours of focused development
+
 -Designed for local deployment and rapid refresh
+
 -Desgined to be less cumbersome and more "up-to-date" then the legacy default AWOS server
+
 -Modular and extensible for additional stations or sensors
+
+
+
 
 📸 Screenshots
 
@@ -127,7 +168,9 @@ Dark Mode:
 
 📸 Launcher Screenshots
 
+
 Main Menu:
+
 <img width="538" height="522" alt="PSlauncher_dashboard" src="https://github.com/user-attachments/assets/8cf2cee9-6c5a-42ac-9b01-e9089fa5ecfa" />
 
 Server Control Menu:
@@ -144,7 +187,5 @@ Log viewer:
 
 
 📬 Contact
-For questions or feedback, open an issue, reach out via GitHub or contact me at chris.pyatt@forces.gc.ca
 
-Contact
-For questions or feedback, open an issue or reach out via GitHub.
+For questions or feedback, open an issue, reach out via GitHub or contact me at chris.pyatt@forces.gc.ca
