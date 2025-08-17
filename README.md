@@ -106,7 +106,7 @@ A real-time weather dashboard for CYTR (Trenton Airport), built with Node.js and
                     
 ### Create a desktop link to the launcher/dashboard(RECOMMENDED)
 
--Create a Desktop shorcut
+-Create a Desktop shortcut
 
 -Set TARGET to "C:\Path\to\pwsh.exe" -ExecutionPolicy Bypass -NoExit -File "Path/to/the/launcher/launcher.ps1"
 
