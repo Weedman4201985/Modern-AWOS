@@ -3,7 +3,6 @@ let countdownTimer = null;
 
 let isPaused = false;
 
-
 let cachedAutoMetar = '';
 let awosReports = [];
 let currentReportIndex = -1;
@@ -266,8 +265,6 @@ function updateReportIndex() {
         statusEl.textContent += ' (Paused)';
     }
 }
-
-
 
 function formatReportTime(raw) {
     if (!raw || raw.length !== 15) return '--';
