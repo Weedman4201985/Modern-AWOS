@@ -130,7 +130,7 @@ placeholders and garbage from the XML report
 
 
 
-🧪 Development Notes
+## 🧪 Development Notes
 
 -Built in ~36 hours of focused development
 
@@ -143,7 +143,7 @@ placeholders and garbage from the XML report
 
 
 
-📸 Screenshots
+## 📸 Screenshots
 
 MAIN PAGE:
 
@@ -186,6 +186,6 @@ Log viewer:
 
 
 
-📬 Contact
+## 📬 Contact
 
 For questions or feedback, open an issue, reach out via GitHub or contact me at chris.pyatt@forces.gc.ca
