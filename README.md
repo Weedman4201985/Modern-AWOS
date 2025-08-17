@@ -43,16 +43,8 @@ A real-time weather dashboard for CYTR (Trenton Airport), built with Node.js and
   - **Logging**: Winston
   - **Scripts**: PowerShell 7
   - **Data Source**: AWOS XML + METAR/TAF feeds
- 
 
-##📍 Station Info
 
-  - ICAO: CYTR
-  - Location: Trenton, Ontario, Canada
-  - Elevation: 86.3m
-  - Coordinates: 44°07′08″N, 77°31′41″W  
- 
-  
 
 ## 📦 Installation
 
@@ -62,8 +54,6 @@ In order to successfully run the server you need:
   -latest LTS version of Node.js with Express. 
   -npm. If npm is missing it can be installed manually.
   -Winston package/module for logging purposes.
-
-
   
 
 To install the server using Bash:
@@ -93,12 +83,18 @@ Once installed, you can create a desktop link to the launcher/dashboard(RECOMMEN
 -Create a Desktop shorcut
 -Set TARGET to "C:\Path\to\pwsh.exe" -ExecutionPolicy Bypass -NoExit -File "Path/to/the/launcher/launcher.ps1"
 
+
+
+
 To view the server and any other server routes type the following into your web browser of choice:
 
 localhost:3000 - Main AWOS page
 localhost:3000/latest-awos - Latest RAW XML data report from the XMCN64 CYTR MET bulletin
 localhost:3000/awos-history - Displays a history of parsed XML data reports(up to 24)
 localhost:3000/raw-xml(not currently functioning correctly) - Displays parsed XML data in an attempt to remove placeholders and garbage from the XML report
+
+
+
 
 
 🧪 Development Notes
