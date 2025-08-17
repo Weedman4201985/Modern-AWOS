@@ -1,0 +1,3565 @@
+package MetManager::conditions;
+ 
+use strict;
+use warnings;
+use POSIX;
+use MetManager;
+use Graphics::Magick;
+use Locale::TextDomain("MetManager-perl", MetManager::dir("mm_localedir"));
+use List::Util qw(max);
+use Tie::IxHash;
+use Data::Dumper;
+
+require Exporter;
+use AutoLoader qw(AUTOLOAD);
+
+our @ISA = qw(Exporter);
+
+# Items to export into callers namespace by default. Note: do not export
+# names by default without a very good reason. Use EXPORT_OK instead.
+# Do not simply export all your public functions/methods/constants.
+
+# This allows declaration	use MetManager::forecasts ':all';
+# If you do not need this, moving things directly into @EXPORT or @EXPORT_OK
+# will save memory.
+our %EXPORT_TAGS = ('all' => [ qw(
+
+) ] );
+
+our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
+
+our @EXPORT = qw(
+
+);
+
+# Preloaded methods go here.
+
+# Autoload methods go after =cut, and are processed by the autosplit program.
+
+our $TRACEID = 'CONDITIONS';
+
+use constant FREEZING => 1;
+use constant PRECIPITATION => 2;
+use constant CONVECTIVE => 4;
+use constant LIGHTNING => 8;
+use constant OBSCURATION => 16;
+use constant INCREASING => 32;
+use constant DECREASING => 64;
+
+# these constants and code2str table are created by running the build_table script
+# do not modify directly
+use constant WX_SH => 0; # Showers
+use constant WX_DZ => 1; # Drizzle
+use constant WX_FZDZ => 2; # Freezing Drizzle
+use constant WX_RA => 3; # Rain
+use constant WX_RASH => 4; # Rain Showers
+use constant WX_FZRA => 5; # Freezing Rain
+use constant WX_SN => 6; # Snow
+use constant WX_BLSN => 7; # Blowing Snow
+use constant WX_DRSN => 8; # Drifting Snow
+use constant WX_SNSH => 9; # Flurries
+use constant WX_SG => 10; # Snow Grains
+use constant WX_IC => 11; # Ice Crystals
+use constant WX_SC => 12; # Snow and Ice Crystals
+use constant WX_PL => 13; # Ice Pellets
+use constant WX_GR => 14; # Hail
+use constant WX_GS => 15; # Snow Pellets
+use constant WX_BR => 16; # Mist
+use constant WX_FG => 17; # Fog
+use constant WX_FZFG => 18; # Freezing Fog
+use constant WX_FU => 19; # Smoke
+use constant WX_VA => 20; # Volcanic Ash
+use constant WX_DU => 21; # Dust or Sand
+use constant WX_BLDU => 22; # Blowing Dust or Sand
+use constant WX_DRDU => 23; # Drifting Dust or Sand
+use constant WX_HZ => 24; # Haze
+use constant WX_PO => 25; # Dust Devils
+use constant WX_SQ => 26; # Squalls
+use constant WX_FC => 27; # Funnel Cloud or Tornado
+use constant WX_DS => 28; # Duststorm or Sandstorm
+use constant WX_TH => 29; # Thunder
+use constant WX_TS => 30; # Thunderstorm
+use constant WX_RADZ_OR => 31; # Rain or Drizzle
+use constant WX_RADZ_AND => 32; # Rain and Drizzle
+use constant WX_FZRADZ_OR => 33; # Freezing Rain or Drizzle
+use constant WX_FZRADZ_AND => 34; # Freezing Rain and Drizzle
+use constant WX_RASN_AND => 35; # Rain and Snow
+use constant WX_RASNSH_AND => 36; # Mixed Rain and Snow Showers
+use constant WX_SNUP_AND => 37; # Snow or Mixed Precipitation
+use constant WX_UP => 38; # Precipitation
+use constant WX_LT => 39; # Lightning
+use constant WX_MIFG => 40; # Shallow Fog
+use constant WX_BCFG => 41; # Patchy Fog
+use constant WX_PRFG => 42; # Partial Fog
+use constant WX_TSRA => 43; # Thunderstorm with Rain
+use constant WX_TSGR => 44; # Thunderstorm with Hail
+use constant WX_TSSN => 45; # Thunderstorm with Snow
+use constant WX_TSPL => 46; # Thunderstorm with Ice Pellets
+use constant WX_TSGS => 47; # Thunderstorm with Snow Pellets
+use constant WX_TSDS => 48; # Thunderstorm with Sand or Dust Storm
+use constant WX_TSRASN_AND => 49; # Thunderstorm with Rain and Snow
+use constant WX_BLZD => 50; # Blizzard
+use constant SKY_CLR => 51; # Clear
+use constant SKY_DECR => 52; # Clearing
+use constant SKY_MCLR => 53; # A few clouds
+use constant SKY_FEW => 54; # A few clouds
+use constant SKY_SCT => 55; # Partly Cloudy
+use constant SKY_MIX => 56; # Partly Cloudy
+use constant SKY_PCLDY => 57; # Partly Cloudy
+use constant SKY_MCLDY => 58; # Mainly Cloudy
+use constant SKY_CLDY => 59; # Cloudy
+use constant SKY_INCR => 60; # Increasing Cloudiness
+use constant SKY_OVC => 61; # Overcast
+use constant WRN_AQ => 62; # Air Quality Warning
+use constant WRN_SN => 63; # Snow Warning
+use constant WRN_DU => 64; # Blowing Dust/Dust Storm Warning
+use constant WRN_BLSN => 65; # Blowing Snow Warning
+use constant WRN_CLD => 66; # Cold Warning
+use constant WRN_FLD => 67; # Flood Warning
+use constant WRN_FG => 68; # Fog Warning
+use constant WRN_FZ => 69; # Freeze Warning
+use constant WRN_FST => 70; # Frost Warning
+use constant WRN_HT => 71; # Heat Warning
+use constant WRN_HCN => 72; # Hurricane Warning
+use constant WRN_ICE => 73; # Ice Warning
+use constant WRN_RA => 74; # Rainfall Warning
+use constant WRN_STSG => 75; # Storm Surge Warning
+use constant WRN_TS => 76; # Thunderstorm Warning
+use constant WRN_FC => 77; # Funnel Cloud Warning
+use constant WRN_TRS => 78; # Tropical Storm Warning
+use constant WRN_TN => 79; # Tsunami Warning
+use constant WRN_WC => 80; # Wind Chill Warning
+use constant WRN_WD => 81; # Wind Warning
+use constant WRN_DEFAULT => 82; # Default Warning
+
+my @code2str = (
+   [
+      {type => WX_SH, modifier => 0, flag => PRECIPITATION,
+         description => N__("Showers"),
+         icon => 'Pcpn_rainshowers_moderate',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SH, modifier => 1, flag => PRECIPITATION,
+         description => N__("Light Showers"),
+         icon => 'Pcpn_rainshowers_light',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SH, modifier => 2, flag => PRECIPITATION,
+         description => N__("Heavy Showers"),
+         icon => 'Pcpn_rainshowers_heavy',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SH, modifier => 3, flag => 0,
+         description => N__("Recent Showers"),
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SH, modifier => 4, flag => 0,
+         description => N__("Showers Near Station"),
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SH, modifier => 5, flag => PRECIPITATION,
+         description => N__("Very Light Showers"),
+         icon => 'Pcpn_rainshowers_light',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_DZ, modifier => 0, flag => PRECIPITATION,
+         description => N__("Drizzle"),
+         icon => 'Pcpn_drizzle_moderate',
+         simple => "cloud-drizzle.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DZ, modifier => 1, flag => PRECIPITATION,
+         description => N__("Light Drizzle"),
+         icon => 'Pcpn_drizzle_light',
+         simple => "cloud-drizzle.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DZ, modifier => 2, flag => PRECIPITATION,
+         description => N__("Heavy Drizzle"),
+         icon => 'Pcpn_drizzle_heavy',
+         simple => "cloud-drizzle.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DZ, modifier => 3, flag => 0,
+         description => N__("Recent Drizzle"),
+         simple => "cloud-drizzle.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DZ, modifier => 4, flag => 0,
+         description => N__("Drizzle Near Station"),
+         simple => "cloud-drizzle.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DZ, modifier => 5, flag => PRECIPITATION,
+         description => N__("Very Light Drizzle"),
+         icon => 'Pcpn_drizzle_light',
+         simple => "cloud-drizzle.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_FZDZ, modifier => 0, flag => FREEZING|PRECIPITATION,
+         description => N__("Freezing Drizzle"),
+         icon => 'Pcpn_fzdz_moderate',
+         simple => "cloud-drizzle.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZDZ, modifier => 1, flag => FREEZING|PRECIPITATION,
+         description => N__("Light Freezing Drizzle"),
+         icon => 'Pcpn_fzdz_light',
+         simple => "cloud-drizzle.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZDZ, modifier => 2, flag => FREEZING|PRECIPITATION,
+         description => N__("Heavy Freezing Drizzle"),
+         icon => 'Pcpn_fzdz_heavy',
+         simple => "cloud-drizzle.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZDZ, modifier => 3, flag => 0,
+         description => N__("Recent Freezing Drizzle"),
+         simple => "cloud-drizzle.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZDZ, modifier => 4, flag => 0,
+         description => N__("Freezing Drizzle Near Station"),
+         simple => "cloud-drizzle.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZDZ, modifier => 5, flag => FREEZING|PRECIPITATION,
+         description => N__("Very Light Freezing Drizzle"),
+         icon => 'Pcpn_fzdz_light',
+         simple => "cloud-drizzle.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_RA, modifier => 0, flag => PRECIPITATION,
+         description => N__("Rain"),
+         icon => 'Pcpn_rain_moderate',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RA, modifier => 1, flag => PRECIPITATION,
+         description => N__("Light Rain"),
+         icon => 'Pcpn_rain_light',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RA, modifier => 2, flag => PRECIPITATION,
+         description => N__("Heavy Rain"),
+         icon => 'Pcpn_rain_heavy',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RA, modifier => 3, flag => 0,
+         description => N__("Recent Rain"),
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RA, modifier => 4, flag => 0,
+         description => N__("Rain Near Station"),
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RA, modifier => 5, flag => PRECIPITATION,
+         description => N__("Very Light Rain"),
+         icon => 'Pcpn_rain_light',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RA, modifier => 6, flag => PRECIPITATION,
+         description => N__("Light Rain, Recent Thunderstorm"),
+         icon => 'Pcpn_rain_light',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RA, modifier => 7, flag => PRECIPITATION,
+         description => N__("Heavy Rain, Recent Thunderstorm"),
+         icon => 'Pcpn_rain_heavy',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_RASH, modifier => 0, flag => PRECIPITATION,
+         description => N__("Rain Showers"),
+         icon => 'Pcpn_rainshowers_moderate',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RASH, modifier => 1, flag => PRECIPITATION,
+         description => N__("Light Rain Showers"),
+         icon => 'Pcpn_rainshowers_light',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RASH, modifier => 2, flag => PRECIPITATION,
+         description => N__("Heavy Rain Showers"),
+         icon => 'Pcpn_rainshowers_heavy',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RASH, modifier => 3, flag => 0,
+         description => N__("Recent Rain Showers"),
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RASH, modifier => 4, flag => 0,
+         description => N__("Rain Showers Near Station"),
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RASH, modifier => 5, flag => PRECIPITATION,
+         description => N__("Very Heavy Rain Showers"),
+         icon => 'Pcpn_rainshowers_heavy',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RASH, modifier => 6, flag => PRECIPITATION,
+         description => N__("Very Light Rain Showers"),
+         icon => 'Pcpn_rainshowers_light',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_FZRA, modifier => 0, flag => FREEZING|PRECIPITATION,
+         description => N__("Freezing Rain"),
+         icon => 'Pcpn_fzra_moderate',
+         simple => "cloud-rain.svg,thermometer-low",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZRA, modifier => 1, flag => FREEZING|PRECIPITATION,
+         description => N__("Light Freezing Rain"),
+         icon => 'Pcpn_fzra_light',
+         simple => "cloud-rain.svg,thermometer-low",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZRA, modifier => 2, flag => FREEZING|PRECIPITATION,
+         description => N__("Heavy Freezing Rain"),
+         icon => 'Pcpn_fzra_heavy',
+         simple => "cloud-rain.svg,thermometer-low",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZRA, modifier => 3, flag => 0,
+         description => N__("Recent Freezing Rain"),
+         simple => "cloud-rain.svg,thermometer-low",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZRA, modifier => 4, flag => 0,
+         description => N__("Freezing Rain Near Station"),
+         simple => "cloud-rain.svg,thermometer-low",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZRA, modifier => 5, flag => FREEZING|PRECIPITATION,
+         description => N__("Very Light Freezing Rain"),
+         icon => 'Pcpn_fzra_light',
+         simple => "cloud-rain.svg,thermometer-low",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_SN, modifier => 0, flag => PRECIPITATION,
+         description => N__("Snow"),
+         icon => 'Pcpn_snow_moderate',
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SN, modifier => 1, flag => PRECIPITATION,
+         description => N__("Light Snow"),
+         icon => 'Pcpn_snow_light',
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SN, modifier => 2, flag => PRECIPITATION,
+         description => N__("Heavy Snow"),
+         icon => 'Pcpn_snow_heavy',
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SN, modifier => 3, flag => 0,
+         description => N__("Recent Snow"),
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SN, modifier => 4, flag => 0,
+         description => N__("Snow Near Station"),
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SN, modifier => 5, flag => PRECIPITATION,
+         description => N__("Very Light Snow"),
+         icon => 'Pcpn_snow_light',
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_BLSN, modifier => 0, flag => OBSCURATION,
+         description => N__("Blowing Snow"),
+         icon => 'Pcpn_blowing_snow_moderate',
+         simple => "wind.svg,snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BLSN, modifier => 1, flag => OBSCURATION,
+         description => N__("Light Blowing Snow"),
+         icon => 'Pcpn_blowing_snow_light',
+         simple => "wind.svg,snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BLSN, modifier => 2, flag => OBSCURATION,
+         description => N__("Heavy Blowing Snow"),
+         icon => 'Pcpn_blowing_snow_heavy',
+         simple => "wind.svg,snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BLSN, modifier => 3, flag => 0,
+         description => N__("Recent Blowing Snow"),
+         simple => "wind.svg,snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BLSN, modifier => 4, flag => 0,
+         description => N__("Blowing Snow Near Station"),
+         simple => "wind.svg,snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BLSN, modifier => 5, flag => OBSCURATION,
+         description => N__("Very Light Blowing Snow"),
+         icon => 'Pcpn_blowing_snow_light',
+         simple => "wind.svg,snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_DRSN, modifier => 0, flag => OBSCURATION,
+         description => N__("Drifting Snow"),
+         icon => 'Pcpn_drifting_snow',
+         simple => "wind.svg,snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DRSN, modifier => 1, flag => OBSCURATION,
+         description => N__("Light Drifting Snow"),
+         icon => 'Pcpn_drifting_snow',
+         simple => "wind.svg,snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DRSN, modifier => 2, flag => OBSCURATION,
+         description => N__("Heavy Drifting Snow"),
+         icon => 'Pcpn_drifting_snow',
+         simple => "wind.svg,snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DRSN, modifier => 3, flag => 0,
+         description => N__("Recent Drifting Snow"),
+         simple => "wind.svg,snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DRSN, modifier => 4, flag => 0,
+         description => N__("Drifting Snow Near Station"),
+         simple => "wind.svg,snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DRSN, modifier => 5, flag => OBSCURATION,
+         description => N__("Very Light Drifting Snow"),
+         icon => 'Pcpn_drifting_snow',
+         simple => "wind.svg,snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_SNSH, modifier => 0, flag => PRECIPITATION,
+         description => N__("Flurries"),
+         icon => 'Pcpn_snow_moderate',
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SNSH, modifier => 1, flag => PRECIPITATION,
+         description => N__("Light Flurries"),
+         icon => 'Pcpn_snow_light',
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SNSH, modifier => 2, flag => PRECIPITATION,
+         description => N__("Heavy Flurries"),
+         icon => 'Pcpn_snow_heavy',
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SNSH, modifier => 3, flag => 0,
+         description => N__("Recent Flurries"),
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SNSH, modifier => 4, flag => 0,
+         description => N__("Flurries Near Station"),
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SNSH, modifier => 5, flag => PRECIPITATION,
+         description => N__("Very Light Flurries"),
+         icon => 'Pcpn_snow_light',
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_SG, modifier => 0, flag => PRECIPITATION,
+         description => N__("Snow Grains"),
+         icon => 'Pcpn_snow_grains_moderate',
+         simple => "snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SG, modifier => 1, flag => PRECIPITATION,
+         description => N__("Light Snow Grains"),
+         icon => 'Pcpn_snow_grains_light',
+         simple => "snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SG, modifier => 2, flag => PRECIPITATION,
+         description => N__("Heavy Snow Grains"),
+         icon => 'Pcpn_snow_grains_heavy',
+         simple => "snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SG, modifier => 3, flag => 0,
+         description => N__("Recent Snow Grains"),
+         simple => "snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SG, modifier => 4, flag => 0,
+         description => N__("Snow Grains Near Station"),
+         simple => "snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SG, modifier => 5, flag => PRECIPITATION,
+         description => N__("Very Light Snow Grains"),
+         icon => 'Pcpn_snow_grains_light',
+         simple => "snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_IC, modifier => 0, flag => PRECIPITATION,
+         description => N__("Ice Crystals"),
+         icon => 'Pcpn_ice_crystals_moderate',
+         simple => "box.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_IC, modifier => 1, flag => PRECIPITATION,
+         description => N__("Light Ice Crystals"),
+         icon => 'Pcpn_ice_crystals_light',
+         simple => "box.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_IC, modifier => 2, flag => PRECIPITATION,
+         description => N__("Heavy Ice Crystals"),
+         icon => 'Pcpn_ice_crystals_heavy',
+         simple => "box.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_IC, modifier => 3, flag => 0,
+         description => N__("Recent Ice Crystals"),
+         simple => "box.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_IC, modifier => 4, flag => 0,
+         description => N__("Ice Crystals Near Station"),
+         simple => "box.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_IC, modifier => 5, flag => PRECIPITATION,
+         description => N__("Very Light Ice Crystals"),
+         icon => 'Pcpn_ice_crystals_light',
+         simple => "box.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_SC, modifier => 0, flag => PRECIPITATION,
+         description => N__("Snow and Ice Crystals"),
+         icon => 'Pcpn_ice_crystals_moderate',
+         simple => "snow.svg,box.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SC, modifier => 1, flag => PRECIPITATION,
+         description => N__("Light Snow and Ice Crystals"),
+         icon => 'Pcpn_ice_crystals_light',
+         simple => "snow.svg,box.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SC, modifier => 2, flag => PRECIPITATION,
+         description => N__("Heavy Snow and Ice Crystals"),
+         icon => 'Pcpn_ice_crystals_heavy',
+         simple => "snow.svg,box.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SC, modifier => 3, flag => 0,
+         description => N__("Recent Snow and Ice Crystals"),
+         simple => "snow.svg,box.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SC, modifier => 4, flag => 0,
+         description => N__("Snow and Ice Crystals Near Station"),
+         simple => "snow.svg,box.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SC, modifier => 5, flag => PRECIPITATION,
+         description => N__("Very Light Snow and Ice Crystals"),
+         icon => 'Pcpn_ice_crystals_light',
+         simple => "snow.svg,box.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_PL, modifier => 0, flag => PRECIPITATION,
+         description => N__("Ice Pellets"),
+         icon => 'Pcpn_ice_pellets_moderate',
+         simple => "cloud-sleet.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_PL, modifier => 1, flag => PRECIPITATION,
+         description => N__("Light Ice Pellets"),
+         icon => 'Pcpn_ice_pellets_light',
+         simple => "cloud-sleet.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_PL, modifier => 2, flag => PRECIPITATION,
+         description => N__("Heavy Ice Pellets"),
+         icon => 'Pcpn_ice_pellets_heavy',
+         simple => "cloud-sleet.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_PL, modifier => 3, flag => 0,
+         description => N__("Recent Ice Pellets"),
+         simple => "cloud-sleet.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_PL, modifier => 4, flag => 0,
+         description => N__("Ice Pellets Near Station"),
+         simple => "cloud-sleet.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_PL, modifier => 5, flag => PRECIPITATION,
+         description => N__("Very Light Ice Pellets"),
+         icon => 'Pcpn_ice_pellets_light',
+         simple => "cloud-sleet.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_GR, modifier => 0, flag => CONVECTIVE|PRECIPITATION,
+         description => N__("Hail"),
+         icon => 'Pcpn_hail_moderate',
+         simple => "cloud-hail.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_GR, modifier => 1, flag => CONVECTIVE|PRECIPITATION,
+         description => N__("Light Hail"),
+         icon => 'Pcpn_hail_light',
+         simple => "cloud-hail.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_GR, modifier => 2, flag => CONVECTIVE|PRECIPITATION,
+         description => N__("Heavy Hail"),
+         icon => 'Pcpn_hail_heavy',
+         simple => "cloud-hail.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_GR, modifier => 3, flag => 0,
+         description => N__("Recent Hail"),
+         simple => "cloud-hail.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_GR, modifier => 4, flag => 0,
+         description => N__("Hail Near Station"),
+         simple => "cloud-hail.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_GR, modifier => 5, flag => CONVECTIVE|PRECIPITATION,
+         description => N__("Very Light Hail"),
+         icon => 'Pcpn_hail_light',
+         simple => "cloud-hail.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_GR, modifier => 6, flag => CONVECTIVE|PRECIPITATION,
+         description => N__("Light Hail, Recent Thunderstorm"),
+         icon => 'Pcpn_hail_light',
+         simple => "cloud-hail.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_GR, modifier => 7, flag => CONVECTIVE|PRECIPITATION,
+         description => N__("Heavy Hail, Recent Thunderstorm"),
+         icon => 'Pcpn_hail_heavy',
+         simple => "cloud-hail.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_GS, modifier => 0, flag => PRECIPITATION,
+         description => N__("Snow Pellets"),
+         icon => 'Pcpn_snow_pellets_moderate',
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_GS, modifier => 1, flag => PRECIPITATION,
+         description => N__("Light Snow Pellets"),
+         icon => 'Pcpn_snow_pellets_light',
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_GS, modifier => 2, flag => PRECIPITATION,
+         description => N__("Heavy Snow Pellets"),
+         icon => 'Pcpn_snow_pellets_heavy',
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_GS, modifier => 3, flag => 0,
+         description => N__("Recent Snow Pellets"),
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_GS, modifier => 4, flag => 0,
+         description => N__("Snow Pellets Near Station"),
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_GS, modifier => 5, flag => PRECIPITATION,
+         description => N__("Very Light Snow Pellets"),
+         icon => 'Pcpn_snow_pellets_light',
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_BR, modifier => 0, flag => OBSCURATION,
+         description => N__("Mist"),
+         icon => 'mist',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BR, modifier => 1, flag => OBSCURATION,
+         description => N__("Light Mist"),
+         icon => 'mist',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BR, modifier => 2, flag => OBSCURATION,
+         description => N__("Heavy Mist"),
+         icon => 'mist',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BR, modifier => 3, flag => 0,
+         description => N__("Recent Mist"),
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BR, modifier => 4, flag => 0,
+         description => N__("Mist Near Station"),
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_FG, modifier => 0, flag => OBSCURATION,
+         description => N__("Fog"),
+         icon => 'fog',
+         simple => "cloud-fog.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FG, modifier => 1, flag => OBSCURATION,
+         description => N__("Light Fog"),
+         icon => 'fog',
+         simple => "cloud-fog.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FG, modifier => 2, flag => OBSCURATION,
+         description => N__("Heavy Fog"),
+         icon => 'fog',
+         simple => "cloud-fog.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FG, modifier => 3, flag => 0,
+         description => N__("Recent Fog"),
+         simple => "cloud-fog.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FG, modifier => 4, flag => OBSCURATION,
+         description => N__("Fog Near Station"),
+         icon => 'fog_near_station',
+         simple => "cloud-fog.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FG, modifier => 5, flag => OBSCURATION,
+         description => N__("Thin Fog"),
+         icon => 'fog_thin',
+         simple => "cloud-fog.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FG, modifier => 6, flag => OBSCURATION,
+         description => N__("Fog Forming"),
+         icon => 'fog',
+         simple => "cloud-fog.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FG, modifier => 7, flag => OBSCURATION,
+         description => N__("Fog Thinning"),
+         icon => 'fog',
+         simple => "cloud-fog.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_FZFG, modifier => 0, flag => FREEZING|OBSCURATION,
+         description => N__("Freezing Fog"),
+         icon => 'fog',
+         simple => "cloud-fog.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZFG, modifier => 1, flag => FREEZING|OBSCURATION,
+         description => N__("Light Freezing Fog"),
+         icon => 'fog',
+         simple => "cloud-fog.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZFG, modifier => 2, flag => FREEZING|OBSCURATION,
+         description => N__("Heavy Freezing Fog"),
+         icon => 'fog',
+         simple => "cloud-fog.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZFG, modifier => 3, flag => 0,
+         description => N__("Recent Freezing Fog"),
+         simple => "cloud-fog.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZFG, modifier => 4, flag => 0,
+         description => N__("Freezing Fog Near Station"),
+         simple => "cloud-fog.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZFG, modifier => 5, flag => FREEZING|OBSCURATION,
+         description => N__("Thin Freezing Fog"),
+         icon => 'fog_thin',
+         simple => "cloud-fog.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZFG, modifier => 6, flag => FREEZING|OBSCURATION,
+         description => N__("Freezing Fog Forming"),
+         icon => 'fog',
+         simple => "cloud-fog.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZFG, modifier => 7, flag => FREEZING|OBSCURATION,
+         description => N__("Freezing Fog Thinning"),
+         icon => 'fog',
+         simple => "cloud-fog.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_FU, modifier => 0, flag => OBSCURATION,
+         description => N__("Smoke"),
+         icon => 'smoke',
+         simple => "cloud-fill.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FU, modifier => 1, flag => OBSCURATION,
+         description => N__("Light Smoke"),
+         icon => 'smoke',
+         simple => "cloud-fill.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FU, modifier => 2, flag => OBSCURATION,
+         description => N__("Heavy Smoke"),
+         icon => 'smoke',
+         simple => "cloud-fill.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FU, modifier => 3, flag => 0,
+         description => N__("Recent Smoke"),
+         simple => "cloud-fill.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FU, modifier => 4, flag => 0,
+         description => N__("Smoke Near Station"),
+         simple => "cloud-fill.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_VA, modifier => 0, flag => OBSCURATION,
+         description => N__("Volcanic Ash"),
+         icon => 'volcanic_ash',
+         simple => "cloud-fill.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_VA, modifier => 1, flag => OBSCURATION,
+         description => N__("Light Volcanic Ash"),
+         icon => 'volcanic_ash',
+         simple => "cloud-fill.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_VA, modifier => 2, flag => OBSCURATION,
+         description => N__("Heavy Volcanic Ash"),
+         icon => 'volcanic_ash',
+         simple => "cloud-fill.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_VA, modifier => 3, flag => 0,
+         description => N__("Recent Volcanic Ash"),
+         simple => "cloud-fill.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_VA, modifier => 4, flag => 0,
+         description => N__("Volcanic Ash Near Station"),
+         simple => "cloud-fill.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_DU, modifier => 0, flag => OBSCURATION,
+         description => N__("Dust or Sand"),
+         icon => 'dust',
+         simple => "asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DU, modifier => 1, flag => OBSCURATION,
+         description => N__("Light Dust or Sand"),
+         icon => 'dust',
+         simple => "asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DU, modifier => 2, flag => OBSCURATION,
+         description => N__("Heavy Dust or Sand"),
+         icon => 'dust',
+         simple => "asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DU, modifier => 3, flag => 0,
+         description => N__("Recent Dust or Sand"),
+         simple => "asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DU, modifier => 4, flag => 0,
+         description => N__("Dust or Sand Near Station"),
+         simple => "asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_BLDU, modifier => 0, flag => OBSCURATION,
+         description => N__("Blowing Dust or Sand"),
+         icon => 'blowing_dust-sand',
+         simple => "wind.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BLDU, modifier => 1, flag => OBSCURATION,
+         description => N__("Light Blowing Dust or Sand"),
+         icon => 'blowing_dust-sand',
+         simple => "wind.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BLDU, modifier => 2, flag => OBSCURATION,
+         description => N__("Heavy Blowing Dust or Sand"),
+         icon => 'blowing_dust-sand',
+         simple => "wind.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BLDU, modifier => 3, flag => 0,
+         description => N__("Recent Blowing Dust or Sand"),
+         simple => "wind.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BLDU, modifier => 4, flag => 0,
+         description => N__("Blowing Dust or Sand Near Station"),
+         simple => "wind.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_DRDU, modifier => 0, flag => OBSCURATION,
+         description => N__("Drifting Dust or Sand"),
+         icon => 'blowing_dust-sand',
+         simple => "wind.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DRDU, modifier => 1, flag => OBSCURATION,
+         description => N__("Light Drifting Dust or Sand"),
+         icon => 'blowing_dust-sand',
+         simple => "wind.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DRDU, modifier => 2, flag => OBSCURATION,
+         description => N__("Heavy Drifting Dust or Sand"),
+         icon => 'blowing_dust-sand',
+         simple => "wind.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DRDU, modifier => 3, flag => 0,
+         description => N__("Recent Drifting Dust or Sand"),
+         simple => "wind.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DRDU, modifier => 4, flag => 0,
+         description => N__("Drifting Dust or Sand Near Station"),
+         simple => "wind.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_HZ, modifier => 0, flag => OBSCURATION,
+         description => N__("Haze"),
+         icon => 'haze',
+         simple => "cloud-haze.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_HZ, modifier => 1, flag => OBSCURATION,
+         description => N__("Light Haze"),
+         icon => 'haze',
+         simple => "cloud-haze.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_HZ, modifier => 2, flag => OBSCURATION,
+         description => N__("Heavy Haze"),
+         icon => 'haze',
+         simple => "cloud-haze.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_HZ, modifier => 3, flag => 0,
+         description => N__("Recent Haze"),
+         simple => "cloud-haze.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_HZ, modifier => 4, flag => 0,
+         description => N__("Haze Near Station"),
+         simple => "cloud-haze.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_PO, modifier => 0, flag => 0,
+         description => N__("Dust Devils"),
+         icon => 'dust_devil',
+         simple => "tornado.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_PO, modifier => 1, flag => 0,
+         description => N__("Light Dust Devils"),
+         icon => 'dust_devil',
+         simple => "tornado.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_PO, modifier => 2, flag => 0,
+         description => N__("Well-developed Dust Devils"),
+         icon => 'dust_devil',
+         simple => "tornado.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_PO, modifier => 3, flag => 0,
+         description => N__("Recent Dust Devils"),
+         simple => "tornado.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_PO, modifier => 4, flag => 0,
+         description => N__("Dust Devils Near Station"),
+         simple => "tornado.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_SQ, modifier => 0, flag => 0,
+         description => N__("Squalls"),
+         icon => 'squalls',
+         simple => "wind.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SQ, modifier => 1, flag => 0,
+         description => N__("Light Squalls"),
+         icon => 'squalls',
+         simple => "wind.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SQ, modifier => 2, flag => 0,
+         description => N__("Heavy Squalls"),
+         icon => 'squalls',
+         simple => "wind.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SQ, modifier => 3, flag => 0,
+         description => N__("Recent Squalls"),
+         simple => "wind.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SQ, modifier => 4, flag => 0,
+         description => N__("Squalls Near Station"),
+         simple => "wind.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_FC, modifier => 0, flag => CONVECTIVE,
+         description => N__("Funnel Cloud or Tornado"),
+         icon => 'funnel_cloud',
+         simple => "tornado.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FC, modifier => 1, flag => CONVECTIVE,
+         description => N__("Light Funnel Cloud or Tornado"),
+         icon => 'funnel_cloud',
+         simple => "tornado.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FC, modifier => 2, flag => CONVECTIVE,
+         description => N__("Well-developed Funnel Cloud or Tornado"),
+         icon => 'funnel_cloud',
+         simple => "tornado.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FC, modifier => 3, flag => 0,
+         description => N__("Recent Funnel Cloud or Tornado"),
+         simple => "tornado.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FC, modifier => 4, flag => 0,
+         description => N__("Funnel Cloud or Tornado Near Station"),
+         simple => "tornado.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_DS, modifier => 0, flag => OBSCURATION,
+         description => N__("Duststorm or Sandstorm"),
+         icon => 'duststorm',
+         simple => "cloud.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DS, modifier => 1, flag => OBSCURATION,
+         description => N__("Light Duststorm or Sandstorm"),
+         icon => 'duststorm',
+         simple => "cloud.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DS, modifier => 2, flag => OBSCURATION,
+         description => N__("Severe Duststorm or Sandstorm"),
+         icon => 'duststorm',
+         simple => "cloud.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DS, modifier => 3, flag => 0,
+         description => N__("Recent Duststorm or Sandstorm"),
+         simple => "cloud.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DS, modifier => 4, flag => 0,
+         description => N__("Duststorm or Sandstorm Near Station"),
+         simple => "cloud.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DS, modifier => 5, flag => OBSCURATION,
+         description => N__("Duststorm or Sandstorm Lessening"),
+         icon => 'duststorm',
+         simple => "cloud.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DS, modifier => 6, flag => OBSCURATION,
+         description => N__("Duststorm or Sandstorm Intensifying"),
+         icon => 'duststorm',
+         simple => "cloud.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DS, modifier => 7, flag => OBSCURATION,
+         description => N__("Severe Duststorm or Sandstorm Lessening"),
+         icon => 'duststorm',
+         simple => "cloud.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_DS, modifier => 8, flag => OBSCURATION,
+         description => N__("Severe Duststorm or Sandstorm Intensifying"),
+         icon => 'duststorm',
+         simple => "cloud.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_TH, modifier => 0, flag => CONVECTIVE|LIGHTNING,
+         description => N__("Thunder"),
+         simple => "cloud-lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TH, modifier => 1, flag => CONVECTIVE|LIGHTNING,
+         description => N__("Light Thunder"),
+         simple => "cloud-lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TH, modifier => 2, flag => CONVECTIVE|LIGHTNING,
+         description => N__("Heavy Thunder"),
+         simple => "cloud-lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TH, modifier => 3, flag => 0,
+         description => N__("Recent Thunder"),
+         simple => "cloud-lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TH, modifier => 4, flag => 0,
+         description => N__("Thunder Near Station"),
+         simple => "cloud-lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_TS, modifier => 0, flag => CONVECTIVE|LIGHTNING,
+         description => N__("Thunderstorm"),
+         simple => "cloud-lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TS, modifier => 1, flag => CONVECTIVE|LIGHTNING,
+         description => N__("Light Thunderstorm"),
+         simple => "cloud-lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TS, modifier => 2, flag => CONVECTIVE|LIGHTNING,
+         description => N__("Heavy Thunderstorm"),
+         simple => "cloud-lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TS, modifier => 3, flag => 0,
+         description => N__("Recent Thunderstorm"),
+         simple => "cloud-lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TS, modifier => 4, flag => 0,
+         description => N__("Thunderstorm Near Station"),
+         simple => "cloud-lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_RADZ_OR, modifier => 0, flag => PRECIPITATION,
+         description => N__("Rain or Drizzle"),
+         icon => 'Pcpn_rain_moderate',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RADZ_OR, modifier => 1, flag => PRECIPITATION,
+         description => N__("Light Rain or Drizzle"),
+         icon => 'Pcpn_rain_light',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RADZ_OR, modifier => 2, flag => PRECIPITATION,
+         description => N__("Heavy Rain or Drizzle"),
+         icon => 'Pcpn_rain_heavy',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RADZ_OR, modifier => 3, flag => 0,
+         description => N__("Recent Rain or Drizzle"),
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RADZ_OR, modifier => 4, flag => 0,
+         description => N__("Rain or Drizzle Near Station"),
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RADZ_OR, modifier => 5, flag => PRECIPITATION,
+         description => N__("Very Light Rain or Drizzle"),
+         icon => 'Pcpn_rain_light',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_RADZ_AND, modifier => 0, flag => PRECIPITATION,
+         description => N__("Rain and Drizzle"),
+         icon => 'Pcpn_rain_moderate',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RADZ_AND, modifier => 1, flag => PRECIPITATION,
+         description => N__("Light Rain and Drizzle"),
+         icon => 'Pcpn_rain_light',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RADZ_AND, modifier => 2, flag => PRECIPITATION,
+         description => N__("Heavy Rain and Drizzle"),
+         icon => 'Pcpn_rain_heavy',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RADZ_AND, modifier => 3, flag => 0,
+         description => N__("Recent Rain and Drizzle"),
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RADZ_AND, modifier => 4, flag => 0,
+         description => N__("Rain and Drizzle Near Station"),
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RADZ_AND, modifier => 5, flag => PRECIPITATION,
+         description => N__("Very Light Rain and Drizzle"),
+         icon => 'Pcpn_rain_light',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_FZRADZ_OR, modifier => 0, flag => FREEZING|PRECIPITATION,
+         description => N__("Freezing Rain or Drizzle"),
+         icon => 'Pcpn_fzra_moderate',
+         simple => "cloud-rain.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZRADZ_OR, modifier => 1, flag => FREEZING|PRECIPITATION,
+         description => N__("Light Freezing Rain or Drizzle"),
+         icon => 'Pcpn_fzra_light',
+         simple => "cloud-rain.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZRADZ_OR, modifier => 2, flag => FREEZING|PRECIPITATION,
+         description => N__("Heavy Freezing Rain or Drizzle"),
+         icon => 'Pcpn_fzra_heavy',
+         simple => "cloud-rain.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZRADZ_OR, modifier => 3, flag => 0,
+         description => N__("Recent Freezing Rain or Drizzle"),
+         simple => "cloud-rain.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZRADZ_OR, modifier => 4, flag => 0,
+         description => N__("Freezing Rain or Drizzle Near Station"),
+         simple => "cloud-rain.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZRADZ_OR, modifier => 5, flag => FREEZING|PRECIPITATION,
+         description => N__("Very Light Freezing Rain or Drizzle"),
+         icon => 'Pcpn_fzra_light',
+         simple => "cloud-rain.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_FZRADZ_AND, modifier => 0, flag => FREEZING|PRECIPITATION,
+         description => N__("Freezing Rain and Drizzle"),
+         icon => 'Pcpn_fzra_moderate',
+         simple => "cloud-rain.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZRADZ_AND, modifier => 1, flag => FREEZING|PRECIPITATION,
+         description => N__("Light Freezing Rain and Drizzle"),
+         icon => 'Pcpn_fzra_light',
+         simple => "cloud-rain.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZRADZ_AND, modifier => 2, flag => FREEZING|PRECIPITATION,
+         description => N__("Heavy Freezing Rain and Drizzle"),
+         icon => 'Pcpn_fzra_heavy',
+         simple => "cloud-rain.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZRADZ_AND, modifier => 3, flag => 0,
+         description => N__("Recent Freezing Rain and Drizzle"),
+         simple => "cloud-rain.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZRADZ_AND, modifier => 4, flag => 0,
+         description => N__("Freezing Rain and Drizzle Near Station"),
+         simple => "cloud-rain.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_FZRADZ_AND, modifier => 5, flag => FREEZING|PRECIPITATION,
+         description => N__("Very Light Freezing Rain and Drizzle"),
+         icon => 'Pcpn_fzra_light',
+         simple => "cloud-rain.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_RASN_AND, modifier => 0, flag => PRECIPITATION,
+         description => N__("Rain and Snow"),
+         icon => 'Pcpn_rain_and_snow_moderate',
+         simple => "cloud-sleet.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RASN_AND, modifier => 1, flag => PRECIPITATION,
+         description => N__("Light Rain and Snow"),
+         icon => 'Pcpn_rain_and_snow_light',
+         simple => "cloud-sleet.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RASN_AND, modifier => 2, flag => PRECIPITATION,
+         description => N__("Heavy Rain and Snow"),
+         icon => 'Pcpn_rain_and_snow_heavy',
+         simple => "cloud-sleet.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RASN_AND, modifier => 3, flag => 0,
+         description => N__("Recent Rain and Snow"),
+         simple => "cloud-sleet.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RASN_AND, modifier => 4, flag => 0,
+         description => N__("Rain and Snow Near Station"),
+         simple => "cloud-sleet.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RASN_AND, modifier => 5, flag => PRECIPITATION,
+         description => N__("Very Light Rain and Snow"),
+         icon => 'Pcpn_rain_and_snow_light',
+         simple => "cloud-sleet.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_RASNSH_AND, modifier => 0, flag => PRECIPITATION,
+         description => N__("Mixed Rain and Snow Showers"),
+         icon => 'Pcpn_rain_and_snow_moderate',
+         simple => "cloud-sleet.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RASNSH_AND, modifier => 1, flag => PRECIPITATION,
+         description => N__("Light Mixed Rain and Snow Showers"),
+         icon => 'Pcpn_rain_and_snow_light',
+         simple => "cloud-sleet.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RASNSH_AND, modifier => 2, flag => PRECIPITATION,
+         description => N__("Heavy Mixed Rain and Snow Showers"),
+         icon => 'Pcpn_rain_and_snow_heavy',
+         simple => "cloud-sleet.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RASNSH_AND, modifier => 3, flag => 0,
+         description => N__("Recent Mixed Rain and Snow Showers"),
+         simple => "cloud-sleet.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RASNSH_AND, modifier => 4, flag => 0,
+         description => N__("Mixed Rain and Snow Showers Near Station"),
+         simple => "cloud-sleet.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_RASNSH_AND, modifier => 5, flag => PRECIPITATION,
+         description => N__("Very Light Mixed Rain and Snow Showers"),
+         icon => 'Pcpn_rain_and_snow_light',
+         simple => "cloud-sleet.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_SNUP_AND, modifier => 0, flag => PRECIPITATION,
+         description => N__("Snow or Mixed Precipitation"),
+         icon => 'Pcpn_snow_moderate',
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SNUP_AND, modifier => 1, flag => PRECIPITATION,
+         description => N__("Light Snow or Mixed Precipitation"),
+         icon => 'Pcpn_snow_light',
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SNUP_AND, modifier => 2, flag => PRECIPITATION,
+         description => N__("Heavy Snow or Mixed Precipitation"),
+         icon => 'Pcpn_snow_heavy',
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SNUP_AND, modifier => 3, flag => 0,
+         description => N__("Recent Snow or Mixed Precipitation"),
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SNUP_AND, modifier => 4, flag => 0,
+         description => N__("Snow or Mixed Precipitation Near Station"),
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_SNUP_AND, modifier => 5, flag => PRECIPITATION,
+         description => N__("Very Light Snow or Mixed Precipitation"),
+         icon => 'Pcpn_snow_light',
+         simple => "cloud-snow.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_UP, modifier => 0, flag => PRECIPITATION,
+         description => N__("Precipitation"),
+         icon => 'Pcpn_rainshowers_moderate',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_UP, modifier => 1, flag => PRECIPITATION,
+         description => N__("Light Precipitation"),
+         icon => 'Pcpn_rainshowers_light',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_UP, modifier => 2, flag => PRECIPITATION,
+         description => N__("Heavy Precipitation"),
+         icon => 'Pcpn_rainshowers_heavy',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_UP, modifier => 3, flag => 0,
+         description => N__("Recent Precipitation"),
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_UP, modifier => 4, flag => 0,
+         description => N__("Precipitation Near Station"),
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_UP, modifier => 5, flag => PRECIPITATION,
+         description => N__("Very Light Precipitation"),
+         icon => 'Pcpn_rainshowers_light',
+         simple => "cloud-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_LT, modifier => 0, flag => CONVECTIVE|LIGHTNING,
+         description => N__("Lightning Reported"),
+         simple => "lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_MIFG, modifier => 0, flag => OBSCURATION,
+         description => N__("Shallow Fog"),
+         icon => 'fog_shallow',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_MIFG, modifier => 1, flag => OBSCURATION,
+         description => N__("Light Shallow Fog"),
+         icon => 'fog_shallow',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_MIFG, modifier => 2, flag => OBSCURATION,
+         description => N__("Heavy Shallow Fog"),
+         icon => 'fog_shallow',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_MIFG, modifier => 3, flag => 0,
+         description => N__("Recent Shallow Fog"),
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_MIFG, modifier => 4, flag => 0,
+         description => N__("Shallow Fog Near Station"),
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_MIFG, modifier => 5, flag => OBSCURATION,
+         description => N__("Thin Shallow Fog"),
+         icon => 'fog_shallow',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_MIFG, modifier => 6, flag => OBSCURATION,
+         description => N__("Shallow Fog Forming"),
+         icon => 'fog_shallow',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_MIFG, modifier => 7, flag => OBSCURATION,
+         description => N__("Shallow Fog Thinning"),
+         icon => 'fog_shallow',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_BCFG, modifier => 0, flag => OBSCURATION,
+         description => N__("Patchy Fog"),
+         icon => 'fog_patchy',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BCFG, modifier => 1, flag => OBSCURATION,
+         description => N__("Light Patchy Fog"),
+         icon => 'fog_patchy',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BCFG, modifier => 2, flag => OBSCURATION,
+         description => N__("Heavy Patchy Fog"),
+         icon => 'fog_patchy',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BCFG, modifier => 3, flag => 0,
+         description => N__("Recent Patchy Fog"),
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BCFG, modifier => 4, flag => 0,
+         description => N__("Patchy Fog Near Station"),
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BCFG, modifier => 5, flag => OBSCURATION,
+         description => N__("Thin Patchy Fog"),
+         icon => 'fog_patchy',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BCFG, modifier => 6, flag => OBSCURATION,
+         description => N__("Patchy Fog Forming"),
+         icon => 'fog_patchy',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_BCFG, modifier => 7, flag => OBSCURATION,
+         description => N__("Patchy Fog Thinning"),
+         icon => 'fog_patchy',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_PRFG, modifier => 0, flag => OBSCURATION,
+         description => N__("Partial Fog"),
+         icon => 'fog_partial',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_PRFG, modifier => 1, flag => OBSCURATION,
+         description => N__("Light Partial Fog"),
+         icon => 'fog_partial',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_PRFG, modifier => 2, flag => OBSCURATION,
+         description => N__("Heavy Partial Fog"),
+         icon => 'fog_partial',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_PRFG, modifier => 3, flag => 0,
+         description => N__("Recent Partial Fog"),
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_PRFG, modifier => 4, flag => 0,
+         description => N__("Partial Fog Near Station"),
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_PRFG, modifier => 5, flag => OBSCURATION,
+         description => N__("Thin Partial Fog"),
+         icon => 'fog_partial',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_PRFG, modifier => 6, flag => OBSCURATION,
+         description => N__("Partial Fog Forming"),
+         icon => 'fog_partial',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_PRFG, modifier => 7, flag => OBSCURATION,
+         description => N__("Partial Fog Thinning"),
+         icon => 'fog_partial',
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_TSRA, modifier => 0, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Thunderstorm with Rain"),
+         icon => 'Pcpn_rain_moderate',
+         simple => "cloud-lightning-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSRA, modifier => 1, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Light Thunderstorm with Rain"),
+         icon => 'Pcpn_rain_light',
+         simple => "cloud-lightning-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSRA, modifier => 2, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Heavy Thunderstorm with Rain"),
+         icon => 'Pcpn_rain_heavy',
+         simple => "cloud-lightning-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSRA, modifier => 3, flag => 0,
+         description => N__("Recent Thunderstorm with Rain"),
+         simple => "cloud-lightning-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSRA, modifier => 4, flag => 0,
+         description => N__("Thunderstorm with Rain Near Station"),
+         simple => "cloud-lightning-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSRA, modifier => 5, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Very Light Thunderstorm with Rain"),
+         icon => 'Pcpn_rain_light',
+         simple => "cloud-lightning-rain.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_TSGR, modifier => 0, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Thunderstorm with Hail"),
+         icon => 'Pcpn_hail_moderate',
+         simple => "cloud-hail.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSGR, modifier => 1, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Light Thunderstorm with Hail"),
+         icon => 'Pcpn_hail_light',
+         simple => "cloud-hail.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSGR, modifier => 2, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Heavy Thunderstorm with Hail"),
+         icon => 'Pcpn_hail_heavy',
+         simple => "cloud-hail.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSGR, modifier => 3, flag => 0,
+         description => N__("Recent Thunderstorm with Hail"),
+         simple => "cloud-hail.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSGR, modifier => 4, flag => 0,
+         description => N__("Thunderstorm with Hail Near Station"),
+         simple => "cloud-hail.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSGR, modifier => 5, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Very Light Thunderstorm with Hail"),
+         icon => 'Pcpn_hail_light',
+         simple => "cloud-hail.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_TSSN, modifier => 0, flag => CONVECTIVE|LIGHTNING,
+         description => N__("Thunderstorm with Snow"),
+         icon => 'Pcpn_snow_moderate',
+         simple => "cloud-snow.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSSN, modifier => 1, flag => CONVECTIVE|LIGHTNING,
+         description => N__("Light Thunderstorm with Snow"),
+         icon => 'Pcpn_snow_light',
+         simple => "cloud-snow.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSSN, modifier => 2, flag => CONVECTIVE|LIGHTNING,
+         description => N__("Heavy Thunderstorm with Snow"),
+         icon => 'Pcpn_snow_heavy',
+         simple => "cloud-snow.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSSN, modifier => 3, flag => 0,
+         description => N__("Recent Thunderstorm with Snow"),
+         simple => "cloud-snow.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSSN, modifier => 4, flag => 0,
+         description => N__("Thunderstorm with Snow Near Station"),
+         simple => "cloud-snow.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSSN, modifier => 5, flag => CONVECTIVE|LIGHTNING,
+         description => N__("Very Light Thunderstorm with Snow"),
+         icon => 'Pcpn_snow_light',
+         simple => "cloud-snow.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_TSPL, modifier => 0, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Thunderstorm with Ice Pellets"),
+         icon => 'Pcpn_ice_pellets_moderate',
+         simple => "cloud-sleet.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSPL, modifier => 1, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Light Thunderstorm with Ice Pellets"),
+         icon => 'Pcpn_ice_pellets_light',
+         simple => "cloud-sleet.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSPL, modifier => 2, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Heavy Thunderstorm with Ice Pellets"),
+         icon => 'Pcpn_ice_pellets_heavy',
+         simple => "cloud-sleet.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSPL, modifier => 3, flag => 0,
+         description => N__("Recent Thunderstorm with Ice Pellets"),
+         simple => "cloud-sleet.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSPL, modifier => 4, flag => 0,
+         description => N__("Thunderstorm with Ice Pellets Near Station"),
+         simple => "cloud-sleet.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSPL, modifier => 5, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Very Light Thunderstorm with Ice Pellets"),
+         icon => 'Pcpn_ice_pellets_light',
+         simple => "cloud-sleet.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_TSGS, modifier => 0, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Thunderstorm with Snow Pellets"),
+         icon => 'Pcpn_snow_pellets_moderate',
+         simple => "cloud-snow.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSGS, modifier => 1, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Light Thunderstorm with Snow Pellets"),
+         icon => 'Pcpn_snow_pellets_light',
+         simple => "cloud-snow.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSGS, modifier => 2, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Heavy Thunderstorm with Snow Pellets"),
+         icon => 'Pcpn_snow_pellets_heavy',
+         simple => "cloud-snow.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSGS, modifier => 3, flag => 0,
+         description => N__("Recent Thunderstorm with Snow Pellets"),
+         simple => "cloud-snow.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSGS, modifier => 4, flag => 0,
+         description => N__("Thunderstorm with Snow Pellets Near Station"),
+         simple => "cloud-snow.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSGS, modifier => 5, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Very Light Thunderstorm with Snow Pellets"),
+         icon => 'Pcpn_snow_pellets_light',
+         simple => "cloud-snow.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_TSDS, modifier => 0, flag => CONVECTIVE|LIGHTNING|OBSCURATION,
+         description => N__("Thunderstorm with Sand or Dust Storm"),
+         icon => 'duststorm',
+         simple => "lightning.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSDS, modifier => 1, flag => CONVECTIVE|LIGHTNING|OBSCURATION,
+         description => N__("Light Thunderstorm with Sand or Dust Storm"),
+         icon => 'duststorm',
+         simple => "lightning.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSDS, modifier => 2, flag => CONVECTIVE|LIGHTNING|OBSCURATION,
+         description => N__("Heavy Thunderstorm with Sand or Dust Storm"),
+         icon => 'duststorm',
+         simple => "lightning.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSDS, modifier => 3, flag => 0,
+         description => N__("Recent Thunderstorm with Sand or Dust Storm"),
+         simple => "lightning.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSDS, modifier => 4, flag => 0,
+         description => N__("Thunderstorm with Sand or Dust Storm Near Station"),
+         simple => "lightning.svg,asterisk.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_TSRASN_AND, modifier => 0, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Thunderstorm with Rain and Snow"),
+         icon => 'Pcpn_rain_and_snow_moderate',
+         simple => "cloud-sleet.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSRASN_AND, modifier => 1, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Light Thunderstorm with Rain and Snow"),
+         icon => 'Pcpn_rain_and_snow_light',
+         simple => "cloud-sleet.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSRASN_AND, modifier => 2, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Heavy Thunderstorm with Rain and Snow"),
+         icon => 'Pcpn_rain_and_snow_heavy',
+         simple => "cloud-sleet.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSRASN_AND, modifier => 3, flag => 0,
+         description => N__("Recent Thunderstorm with Rain and Snow"),
+         simple => "cloud-sleet.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSRASN_AND, modifier => 4, flag => 0,
+         description => N__("Thunderstorm with Rain and Snow Near Station"),
+         simple => "cloud-sleet.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => WX_TSRASN_AND, modifier => 5, flag => CONVECTIVE|LIGHTNING|PRECIPITATION,
+         description => N__("Very Light Thunderstorm with Rain and Snow"),
+         icon => 'Pcpn_rain_and_snow_light',
+         simple => "cloud-sleet.svg,lightning.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WX_BLZD, modifier => 0, flag => 0,
+         description => N__("Blizzard"),
+         icon => 'Pcpn_snow_heavy',
+         simple => "cloud-snow-fill.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => SKY_CLR, modifier => 0, flag => 0,
+         description => N__("Clear"),
+         simple => "moon.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => SKY_CLR, modifier => 1, flag => DECREASING,
+         description => N__("Clearing"),
+      },
+      {type => SKY_CLR, modifier => 2, flag => INCREASING,
+         description => N__("Increasing Cloudiness"),
+         simple => "moon.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => SKY_CLR, modifier => 3, flag => 0,
+         description => N__("Sunny"),
+         simple => "sun.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => SKY_DECR, modifier => 0, flag => DECREASING,
+         description => N__("Clearing"),
+         icon => 'Clouds_sct',
+         simple => "cloud-moon.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => SKY_MCLR, modifier => 0, flag => 0,
+         description => N__("A few clouds"),
+         icon => 'Clouds_few',
+         simple => "cloud-moon.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => SKY_MCLR, modifier => 1, flag => DECREASING,
+         description => N__("Clearing"),
+         icon => 'Clouds_few',
+      },
+      {type => SKY_MCLR, modifier => 2, flag => INCREASING,
+         description => N__("Increasing Cloudiness"),
+         icon => 'Clouds_few',
+         simple => "cloud-moon.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => SKY_MCLR, modifier => 3, flag => 0,
+         description => N__("Mainly Sunny"),
+         icon => 'Clouds_few',
+         simple => "cloud-sun.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => SKY_FEW, modifier => 0, flag => 0,
+         description => N__("A few clouds"),
+         icon => 'Clouds_few',
+         simple => "cloud-moon.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => SKY_FEW, modifier => 1, flag => DECREASING,
+         description => N__("Clearing"),
+         icon => 'Clouds_few',
+      },
+      {type => SKY_FEW, modifier => 2, flag => INCREASING,
+         description => N__("Increasing Cloudiness"),
+         icon => 'Clouds_few',
+         simple => "cloud-moon.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => SKY_FEW, modifier => 3, flag => 0,
+         description => N__("Mainly Sunny"),
+         icon => 'Clouds_few',
+         simple => "cloud-sun.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => SKY_SCT, modifier => 0, flag => 0,
+         description => N__("Partly Cloudy"),
+         icon => 'Clouds_sct',
+         simple => "cloud-moon.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => SKY_SCT, modifier => 1, flag => DECREASING,
+         description => N__("Clearing"),
+         icon => 'Clouds_sct',
+      },
+      {type => SKY_SCT, modifier => 2, flag => INCREASING,
+         description => N__("Increasing Cloudiness"),
+         icon => 'Clouds_sct',
+         simple => "cloud-moon.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => SKY_SCT, modifier => 3, flag => 0,
+         description => N__("A mix of sun and cloud"),
+         icon => 'Clouds_sct',
+         simple => "cloud-sun.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => SKY_MIX, modifier => 0, flag => 0,
+         description => N__("Partly Cloudy"),
+         icon => 'Clouds_sct',
+         simple => "cloud-moon.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => SKY_MIX, modifier => 1, flag => DECREASING,
+         description => N__("Clearing"),
+         icon => 'Clouds_sct',
+      },
+      {type => SKY_MIX, modifier => 2, flag => INCREASING,
+         description => N__("Increasing Cloudiness"),
+         icon => 'Clouds_sct',
+         simple => "cloud-moon.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => SKY_MIX, modifier => 3, flag => 0,
+         description => N__("A mix of sun and cloud"),
+         icon => 'Clouds_sct',
+         simple => "cloud-sun.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => SKY_PCLDY, modifier => 0, flag => 0,
+         description => N__("Partly Cloudy"),
+         icon => 'Clouds_bkn',
+         simple => "cloud-moon.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => SKY_PCLDY, modifier => 1, flag => DECREASING,
+         description => N__("Clearing"),
+         icon => 'Clouds_bkn',
+      },
+      {type => SKY_PCLDY, modifier => 2, flag => INCREASING,
+         description => N__("Increasing Cloudiness"),
+         icon => 'Clouds_bkn',
+         simple => "cloud-moon.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => SKY_PCLDY, modifier => 3, flag => 0,
+         description => N__("A mix of sun and cloud"),
+         icon => 'Clouds_bkn',
+         simple => "cloud-sun.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => SKY_MCLDY, modifier => 0, flag => 0,
+         description => N__("Mainly Cloudy"),
+         icon => 'Clouds_bkn',
+         simple => "clouds.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => SKY_MCLDY, modifier => 1, flag => DECREASING,
+         description => N__("Clearing"),
+         icon => 'Clouds_bkn',
+      },
+      {type => SKY_MCLDY, modifier => 2, flag => INCREASING,
+         description => N__("Increasing Cloudiness"),
+         icon => 'Clouds_bkn',
+         simple => "clouds.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => SKY_CLDY, modifier => 0, flag => 0,
+         description => N__("Cloudy"),
+         icon => 'Clouds_bkn',
+         simple => "clouds.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => SKY_CLDY, modifier => 1, flag => DECREASING,
+         description => N__("Clearing"),
+         icon => 'Clouds_bkn',
+      },
+      {type => SKY_CLDY, modifier => 2, flag => INCREASING,
+         description => N__("Increasing Cloudiness"),
+         icon => 'Clouds_bkn',
+         simple => "clouds.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => SKY_INCR, modifier => 0, flag => INCREASING,
+         description => N__("Increasing Cloudiness"),
+         icon => 'Clouds_sct',
+         simple => "clouds.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => SKY_OVC, modifier => 0, flag => 0,
+         description => N__("Overcast"),
+         icon => 'Clouds_ovc',
+         simple => "clouds.svg",
+         simple_source => "bootstrap/icons/",
+      },
+      {type => SKY_OVC, modifier => 1, flag => DECREASING,
+         description => N__("Clearing"),
+         icon => 'Clouds_ovc',
+      },
+      {type => SKY_OVC, modifier => 2, flag => INCREASING,
+         description => N__("Increasing Cloudiness"),
+         icon => 'Clouds_ovc',
+         simple => "clouds.svg",
+         simple_source => "bootstrap/icons/",
+      },
+   ],
+   [
+      {type => WRN_AQ, modifier => 0, flag => 0,
+         description => N__("Air Quality Warning"),
+         simple => "lungs.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_SN, modifier => 0, flag => 0,
+         description => N__("Snow Warning"),
+         simple => "snow2.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_DU, modifier => 0, flag => 0,
+         description => N__("Blowing Dust/Dust Storm Warning"),
+         simple => "wind.svg,asterisk.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_BLSN, modifier => 0, flag => 0,
+         description => N__("Blowing Snow Warning"),
+         simple => "wind.svg,snow.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_CLD, modifier => 0, flag => 0,
+         description => N__("Cold Warning"),
+         simple => "thermometer-low.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_FLD, modifier => 0, flag => 0,
+         description => N__("Flood Warning"),
+         simple => "water.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_FG, modifier => 0, flag => 0,
+         description => N__("Fog Warning"),
+         simple => "cloud-fog2.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_FZ, modifier => 0, flag => 0,
+         description => N__("Freeze Warning"),
+         simple => "droplet.svg,thermometer-low.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_FST, modifier => 0, flag => 0,
+         description => N__("Frost Warning"),
+         simple => "thermometer-snow.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_HT, modifier => 0, flag => 0,
+         description => N__("Heat Warning"),
+         simple => "thermometer-high.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_HCN, modifier => 0, flag => 0,
+         description => N__("Hurricane Warning"),
+         simple => "hurricane.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_ICE, modifier => 0, flag => 0,
+         description => N__("Ice Warning"),
+         simple => "box.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_RA, modifier => 0, flag => 0,
+         description => N__("Rainfall Warning"),
+         simple => "droplet.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_STSG, modifier => 0, flag => 0,
+         description => N__("Storm Surge Warning"),
+         simple => "water.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_TS, modifier => 0, flag => 0,
+         description => N__("Thunderstorm Warning"),
+         simple => "lightning.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_FC, modifier => 0, flag => 0,
+         description => N__("Funnel Cloud Warning"),
+         simple => "tornado.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_TRS, modifier => 0, flag => 0,
+         description => N__("Tropical Storm Warning"),
+         simple => "tropical-storm.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_TN, modifier => 0, flag => 0,
+         description => N__("Tsunami Warning"),
+         simple => "tsunami.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_WC, modifier => 0, flag => 0,
+         description => N__("Wind Chill Warning"),
+         simple => "thermometer-low.svg,wind.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_WD, modifier => 0, flag => 0,
+         description => N__("Wind Warning"),
+         simple => "wind.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+   [
+      {type => WRN_DEFAULT, modifier => 0, flag => 0,
+         description => N__("Default Warning"),
+         simple => "exclamation-triangle.svg",
+         simple_source => "bootstrap/icons",
+      },
+   ],
+);
+
+my %cloud_matches = (
+	"SUNNY" => SKY_CLR+0.3,  "ENSOLEILLE" => SKY_CLR+0.3,
+	"CLEAR" => SKY_CLR, "DEGAGE" => SKY_CLR,
+
+	"MAINLY SUNNY" => SKY_FEW+0.3, "GENERALEMENT ENSOLEILLE" => SKY_FEW+0.3,
+	"BECOMING MAINLY SUNNY" => SKY_FEW+0.3,
+	"DEVENANT GENERALEMENT ENSOLEILLE" => SKY_FEW+0.3,
+	"A FEW CLOUDS" => SKY_FEW, "QUELQUES NUAGES" => SKY_FEW,
+	"BECOMING A FEW CLOUDS" => SKY_FEW, "DEVENANT QUELQUES NUAGES" => SKY_FEW,
+
+	"PARTLY CLOUDY" => SKY_MIX, "PARTIELLEMENT NUAGEUX" => SKY_MIX,
+	"A MIX OF SUN AND CLOUD" => SKY_MIX+0.3,
+	"ALTERNANCE DE SOLEIL ET DE NUAGES" => SKY_MIX+0.3,
+	"DEVENANT ALTERNANCE DE SOLEIL ET DE NUAGES" => SKY_MIX+0.3,
+	"BECOMING PARTLY CLOUDY" => SKY_MIX, "DEVENANT PARTIELLEMENT NUAGEUX" => SKY_MIX,
+	"BECOMING A MIX OF SUN AND CLOUD" => SKY_MIX,
+	"CLOUDY PERIODS" => SKY_MIX, "PASSAGES NUAGEUX" => SKY_MIX,
+
+	"MAINLY CLOUDY" => SKY_MCLDY, "GENERALEMENT NUAGEUX" => SKY_MCLDY,
+	"BECOMING MAINLY CLOUDY" => SKY_MCLDY,
+	"DEVENANT GENERALEMENT NUAGEUX" => SKY_MCLDY,
+
+	"CLOUDY" => SKY_OVC, "NUAGEUX" => SKY_OVC,
+
+	"OVERCAST" => SKY_OVC, "COUVERT" => SKY_OVC,
+
+	"CLEARING" => SKY_DECR, "DEGAGEMENT" => SKY_DECR,
+	"BECOMING SUNNY" => SKY_DECR, "DEVENANT ENSOLEILLE" => SKY_DECR,
+	"BECOMING CLEAR" => SKY_DECR, "DEVENANT DEGAGE" => SKY_DECR,
+
+	"INCREASING CLOUDINESS" => SKY_INCR, "ENNUAGEMENT" => SKY_INCR,
+	"BECOMING CLOUDY" => SKY_INCR, "DEVENANT NUAGEUX" => SKY_INCR,
+);
+
+my $hvy_en = "AT TIMES HEAVY";
+my $hvy_fr1 = "PARFOIS FORTE";
+my $hvy_fr2 = "PARFOIS FORTES";
+my $hvy_re = qr/(?:$hvy_en)|(?:$hvy_fr1)|(?:$hvy_fr2)/;
+my $hvy = 0.2; my $lgt = 0.1;
+my %ra_matches = (
+	"RAIN" => WX_RA, "PLUIE" => WX_RA,
+	"PERIODS OF RAIN" => WX_RA+$lgt, "PLUIE INTERMITTENTE" => WX_RA+$lgt,
+	"RAIN $hvy_en" => WX_RA+$hvy,
+	"PLUIE $hvy_fr1" => WX_RA+$hvy, "PLUIE $hvy_fr2" => WX_RA+$hvy,
+);
+my %rash_matches = (
+		"RAIN SHOWERS" => WX_RASH+$lgt, "AVERSES DE PLUIE" => WX_RASH+$lgt,
+		"A FEW RAIN SHOWERS" => WX_RASH+$lgt, "QUELQUES AVERSES DE PLUIE" => WX_RASH+$lgt,
+		"RAIN SHOWERS $hvy_en" => WX_RASH+$hvy,
+		"AVERSES DE PLUIE $hvy_fr1" => WX_RASH+$hvy,
+		"AVERSES DE PLUIE $hvy_fr2" => WX_RASH+$hvy,
+);
+my %sn_matches = (
+	"SNOW" => WX_SN, "NEIGE" => WX_SN,
+	"LIGHT SNOW" => WX_SN+$lgt, "FAIBLE NEIGE" => WX_SN+$lgt,
+	"LIGHT WET SNOW" => WX_SN+$lgt, "FAIBLE NEIGE FONDANTE" => WX_SN+$lgt,
+	"SNOW $hvy_en" => WX_SN+$hvy,
+	"NEIGE $hvy_fr1" => WX_SN+$hvy, "NEIGE $hvy_fr2" => WX_SN+$hvy,
+	"WET SNOW $hvy_en" => WX_SN+$hvy,
+	"NEIGE FONDANTE $hvy_fr1" => WX_SN+$hvy, "NEIGE FONDANTE $hvy_fr2" => WX_SN+$hvy,
+	"WET SNOW" => WX_SN, "NEIGE FONDANTE" => WX_SN,
+	"PERIODS OF SNOW" => WX_SN+$lgt, "NEIGE INTERMITTENTE" => WX_SN+$lgt,
+	"PERIODS OF LIGHT SNOW" => WX_SN+$lgt, "FAIBLE NEIGE INTERMITTENTE" => WX_SN+$lgt,
+	"PERIODS OF WET SNOW" => WX_SN+$lgt, "NEIGE FONDANTE INTERMITTENTE" => WX_SN+$lgt,
+	"PERIODS OF LIGHT WET SNOW" => WX_SN+$lgt,
+	"FAIBLE NEIGE FONDANTE INTERMITTENTE" => WX_SN+$lgt,
+	"QUELQUES AVERSES DE NEIGE FONDANTE" => WX_SN+$lgt,
+	"SNOW AT TIMES" => WX_SN+$lgt,
+	"NEIGE PAR MOMENTS" => WX_SN+$lgt,
+	"WET SNOW AT TIMES" => WX_SN+$lgt,
+	"NEIGE FONDANTE PAR MOMENTS" => WX_SN+$lgt,
+);
+my %dz_matches = (
+	"DRIZZLE" => WX_DZ+$lgt, "BRUINE" => WX_DZ+$lgt,
+	"PERIODS OF DRIZZLE" => WX_DZ+$lgt, "BRUINE INTERMITTENTE" => WX_DZ+$lgt,
+	"DRIZZLE AT TIMES" => WX_DZ+$lgt,
+	"BRUINE PAR MOMENTS" => WX_DZ+$lgt,
+	"DRIZZLE SPREADING INLAND" => WX_FG,
+	"DRIZZLE RETREATING TO THE COAST" => WX_DZ+$lgt,
+	"BRUINE SE RETIRANT VERS LA COTE" => WX_DZ+$lgt,
+	"BRUINE SE DEPLACANT VERS L'INTERIEUR" => WX_DZ+$lgt,
+);
+my %fzra_matches = (
+	"FREEZING RAIN" => WX_FZRA, "PLUIE VERGLACANTE" => WX_FZRA,
+	"PERIODS OF FREEZING RAIN" => WX_FZRA+$lgt,
+	"PLUIE VERGLACANTE INTERMITTENTE" => WX_FZRA+$lgt,
+	"FREEZING RAIN $hvy_en" => WX_FZRA+$hvy,
+	"PLUIE VERGLACANTE $hvy_fr1" => WX_FZRA+$hvy,
+	"PLUIE VERGLACANTE $hvy_fr2" => WX_FZRA+$hvy,
+);
+my %fzdz_matches = (
+	"FREEZING DRIZZLE" => WX_FZDZ+$lgt, "BRUINE VERGLACANTE" => WX_FZDZ+$lgt,
+	"FREEZING DRIZZLE AT TIMES" => WX_FZDZ+$lgt,
+	"PERIODS OF FREEZING DRIZZLE" => WX_FZDZ+$lgt,
+	"BRUINE VERGLACANTE INTERMITTENTE" => WX_FZDZ+$lgt,
+);
+my %pl_matches = (
+	"ICE PELLETS" => WX_PL, "GRESIL" => WX_PL,
+	"ICE PELLETS AT TIMES" => WX_PL+$lgt, "GRESIL PARFOIS" => WX_PL+$lgt,
+	"PERIODS OF ICE PELLETS" => WX_PL+$lgt, "GRESIL INTERMITTENTE" => WX_PL+$lgt,
+	"GRESIL INTERMITTENT" => WX_PL+$lgt,
+);
+my %gr_matches = (
+	"HAIL" => WX_GR, "GRELE" => WX_GR,
+);
+my %sh_matches = (
+	"SHOWERS" => WX_SH+$lgt, "AVERSES" => WX_SH+$lgt,
+	"A FEW SHOWERS" => WX_SH+$lgt, "QUELQUES AVERSES" => WX_SH+$lgt,
+	"SHOWERS $hvy_en" => WX_SH+$hvy,
+	"AVERSES $hvy_fr1" => WX_SH+$hvy,
+	"AVERSES $hvy_fr2" => WX_SH+$hvy,
+);
+my %snsh_matches = (
+	"A FEW FLURRIES" => WX_SNSH+$lgt, "QUELQUES AVERSES DE NEIGE" => WX_SNSH+$lgt,
+	"FLURRIES $hvy_en" => WX_SNSH+$hvy,
+	"AVERSES DE NEIGE $hvy_fr1" => WX_SNSH+$hvy,
+	"AVERSES DE NEIGE $hvy_fr2" => WX_SNSH+$hvy,
+	"WET FLURRIES" => WX_SNSH+$lgt, "AVERSES DE NEIGE FONDANTE" => WX_SNSH+$lgt,
+	"FLURRIES" => WX_SNSH+$lgt, "AVERSES DE NEIGE" => WX_SNSH+$lgt,
+	"A FEW WET FLURRIES" => WX_SNSH+$lgt,
+	"FLURRIES AT TIMES" => WX_SNSH+$lgt,
+	"AVERSES DE NEIGE PAR MOMENTS" => WX_SNSH+$lgt,
+);
+my %ts_matches = (
+	"SEVERE THUNDERSTORMS AND HAIL" => WX_TSGR+$hvy, 
+	"ORAGES VIOLENTS ET DE GRELE" => WX_TSGR+$hvy,
+	"HAIL AND A SEVERE THUNDERSTORM" => WX_TSGR+$hvy,
+	"GRELE ET D'UN ORAGE VIOLENT" => WX_TSGR+$hvy,
+	"THUNDERSTORMS AND HAIL" => WX_TSGR, "ORAGES ET DE GRELE" => WX_TSGR,
+	"HAIL AND A THUNDERSTORM" => WX_TSGR, "GRELE ET D'UN ORAGE" => WX_TSGR,
+	"HAIL AND THUNDERSTORMS" => WX_TSGR, "GRELE ET D'ORAGES" => WX_TSGR,
+	"A SEVERE THUNDERSTORM" => WX_TSRA+$hvy,
+	"SEVERE THUNDERSTORMS" => WX_TSRA+$hvy, "A SEVERE THUNDERSTORM" => WX_TSRA+$hvy,
+	"ORAGES VIOLENTS" => WX_TSRA+$hvy, "UN ORAGE VIOLENT" => WX_TSRA+$hvy,
+	"A FEW THUNDERSTORMS" => WX_TSRA, "A FEW THUNDERSHOWERS" => WX_TSRA,
+	"QUELQUES ORAGES" => WX_TSRA,
+	"THUNDERSTORMS" => WX_TSRA, "THUNDERSHOWERS" => WX_TSRA,
+	"ORAGE" => WX_TSRA, "ORAGES" => WX_TSRA,
+	"A THUNDERSTORM" => WX_TSRA, "A THUNDERSHOWER" => WX_TSRA,
+	"UN ORAGE" => WX_TSRA,
+);
+my %blizz_matches = (
+	"BLIZZARD" => WX_BLZD,
+	"NEAR BLIZZARD" => WX_BLZD,
+	"BLIZZARD DEVELOPING" => WX_BLZD,
+	"QUASI BLIZZARD" => WX_BLZD,
+);
+my %obstruction_matches = ();
+tie(%obstruction_matches, 'Tie::IxHash');
+%obstruction_matches = (
+	"A FEW SNOW SQUALLS" => WX_BLSN,
+	"QUELQUES BOURRASQUES DE NEIGE" => WX_BLSN,
+	"RISK OF SNOW SQUALLS" => WX_BLSN,
+	"RISQUE DE BOURRASQUES DE NEIGE" => WX_BLSN,
+	"SNOW SQUALLS" => WX_BLSN,
+	"BOURRASQUES DE NEIGE" => WX_BLSN,
+	"BLOWING SNOW" => WX_BLSN,
+	"BLOWING SNOW AT TIMES" => WX_BLSN,
+	"POUDRERIE" => WX_BLSN,
+	"POUDRERIE PAR MOMENTS" => WX_BLSN,
+	"ICE FOG" => WX_FZFG, "BROUILLARD GLACE" => WX_FZFG,
+	"ICE FOG AT TIMES" => WX_FZFG,
+	"BROUILLARD GLACE PAR MOMENTS" => WX_FZFG,
+	"ICE FOG DEVELOPING" => WX_FZFG, "BROUILLARD GLACE SE FORMANT" => WX_FZFG,
+	"ICE FOG DISSIPATING" => WX_FZFG, "BROUILLARD GLACE SE DISSIPANT" => WX_FZFG,
+	"ICE FOG PATCHES" => WX_FZFG, 
+	"NAPPES DE BROUILLARD GLACE" => WX_FZFG,
+	"ICE FOG PATCHES DEVELOPING" => WX_FZFG, 
+	"NAPPES DE BROUILLARD GLACE SE FORMANT" => WX_FZFG,
+	"ICE FOG PATCHES DISSIPATING" => WX_FZFG, 
+	"NAPPES DE BROUILLARD GLACE SE DISSIPANT" => WX_FZFG,
+	"ICE FOG PATCHES DEVELOPING AND DISSIPATING" => WX_FZFG,
+	"NAPPES DE BROUILLARD GLACE SE FORMANT ET SE DISSIPANT" => WX_FZFG,
+	"ICE FOG PATCHES DISSIPATING AND DEVELOPING" => WX_FZFG,
+	"NAPPES DE BROUILLARD GLACE SE DISSIPANT ET SE FORMANT" => WX_FZFG,
+	"FOG" => WX_FG, "BROUILLARD" => WX_FG,
+	"FOG DISSIPATING" => WX_FG, "BROUILLARD SE DISSIPANT" => WX_FG,
+	"FOG DEVELOPING" => WX_FG, "BROUILLARD SE FORMANT" => WX_FG,
+	"FOG SPREADING INLAND" => WX_FG,
+	"BROUILLARD SE DEPLACANT VERS L'INTERIEUR" => WX_FG,
+	"FOG RETREATING TO THE COAST" => WX_FG,
+	"BROUILLARD SE RETIRANT VERS LA COTE" => WX_FG,
+	"FOG DEVELOPING AND DISSIPATING" => WX_FG,
+	"FOG DISSIPATING AND DEVELOPING" => WX_FG,
+	"BROUILLARD SE FORMANT ET SE DISSIPANT" => WX_FG,
+	"BROUILLARD SE DISSIPANT ET SE FORMANT" => WX_FG,
+	"FOG AT TIMES" => WX_FG,
+	"BROUILLARD PAR MOMENTS" => WX_FG,
+	"SMOKE" => WX_FU, "FUMEE" => WX_FU,
+	"WIDESPREAD SMOKE" => WX_FU, "FUMEE GENERALISEE" => WX_FU,
+	"HAZY" => WX_HZ, "BRUMEUX" => WX_HZ,
+	"HAZY AT TIMES" => WX_HZ, "BRUMEUX PAR MOMENTS" => WX_HZ,
+	"FOG PATCHES" => WX_BCFG, "NAPPES DE BROUILLARD" => WX_BCFG,
+	"FOG PATCHES AT TIMES" => WX_BCFG,
+	"NAPPES DE BROUILLARD PAR MOMENTS" => WX_BCFG,
+	"FOG PATCHES DISSIPATING" => WX_BCFG,
+	"NAPPES DE BROUILLARD SE DISSIPANT" => WX_BCFG,
+	"FOG PATCHES DEVELOPING" => WX_BCFG, "NAPPES DE BROUILLARD SE FORMANT" => WX_BCFG,
+	"FOG PATCHES SPREADING INLAND" => WX_BCFG,
+	"NAPPES DE BROUILLARD SE DEPLACANT VERS L'INTERIEUR" => WX_BCFG,
+	"FOG PATCHES RETREATING TO THE COAST" => WX_BCFG,
+	"NAPPES DE BROUILLARD SE RETIRANT VERS LA COTE" => WX_BCFG,
+	"FOG PATCHES DEVELOPING AND DISSIPATING" => WX_BCFG,
+	"FOG PATCHES DISSIPATING AND DEVELOPING" => WX_BCFG,
+	"NAPPES DE BROUILLARD SE FORMANT ET SE DISSIPANT" => WX_BCFG,
+	"NAPPES DE BROUILLARD SE DISSIPANT ET SE FORMANT" => WX_BCFG,
+	"DRIFTING SNOW" => WX_DRSN,
+	"POUDRERIE BASSE" => WX_DRSN,
+	"OCCASIONAL DRIFTING SNOW" => WX_DRSN,
+	"POUDRERIE BASSE PASSAGERE" => WX_DRSN,
+);
+
+my %wrn_matches = (
+	WRN_AQ => {
+		match => qr/(air)/i,
+      code => WRN_AQ
+	},
+   WRN_SN => {
+		match => qr/(snow|blizzard|winter storm|neige|tempête hivernale)/i,
+		not_match => qr/(blowing)/i,
+      code => WRN_SN
+	},
+   WRN_DU => {
+		match => qr/(dust|poussière)/i,
+      code => WRN_DU
+	},
+   WRN_BLSN => {
+		match => qr/(blowing snow|POUDRERIE)/i,
+      code => WRN_BLSN
+	},
+   WRN_CLD => {
+		match => qr/(cold|froid)/i,
+      code => WRN_CLD
+	},
+   WRN_FLD => {
+		match => qr/(flood|high water level|inondation|niveau d'eau élevé)/i,
+      code => WRN_FLD
+	},
+   WRN_FG => {
+		match => qr/(fog|brouillard)/i,
+      code => WRN_FG
+	},
+   WRN_FZ => {
+		match => qr/(freezing|freeze|verglacante|spray)/i,
+      code => WRN_FZ
+	},
+   WRN_FST => {
+		match => qr/(frost|givre)/i,
+      code => WRN_FST
+	},
+   WRN_HT => {
+		match => qr/(heat|chaleur)/i,
+      code => WRN_HT
+	},
+   WRN_HCN => {
+		match => qr/(hurricane|typhoon|cyclone|ouragan|typhon)/i,
+      code => WRN_HCN
+	},
+   WRN_ICE => {
+		match => qr/(ice|glace)/i,
+      code => WRN_ICE
+	},
+   WRN_RA => {
+		match => qr/(rain|précipitations|pluie)/i,
+		not_match => qr/(freezing|verglacante|spray)/i,
+      code => WRN_RA
+	},
+   WRN_STSG => {
+		match => qr/(storm surge|onde de tempête)/i,
+      code => WRN_STSG
+	},
+   WRN_TS => {
+		match => qr/(thunderstorm|orage)/i,
+      code => WRN_TS
+	},
+   WRN_FC => {
+		match => qr/(tornado|waterspout|funnel cloud|tornade|trombe|nuage en entonnoir)/i,
+      code => WRN_FC
+	},
+   WRN_TRS => {
+		match => qr/(tropical storm|tempête tropicale)/i,
+      code => WRN_TRS
+	},
+   WRN_TN => {
+		match => qr/(tsunami|surf|rip current|courant de retour)/i,
+      code => WRN_TN
+	},
+   WRN_WC => {
+		match => qr/(wind chill|arctic outflow|arctic flow|refroidissement éolien|écoulement arctique)/i,
+      code => WRN_WC
+	},
+   WRN_WD => {
+		match => qr/(wind|gust|squall|gale|vent|rafale|bourrasque)/i,
+		not_match => qr/(snow|chill|neige)/i,
+      code => WRN_WD
+	}
+);
+
+my %obstruction_priority = ();
+my $counter = 1;
+foreach my $c (values(%obstruction_matches)) {
+	next if (exists($obstruction_priority{$c}));
+	$obstruction_priority{$c} = $counter;
+	$counter++;
+}
+
+my %all_matches = (%ra_matches, %rash_matches, %sn_matches, %dz_matches, %fzra_matches,
+	%fzdz_matches, %pl_matches, %gr_matches, %sh_matches, %snsh_matches,
+	%ts_matches, %obstruction_matches);
+my $match_str = join('|',
+	sort({length($b) <=> length($a)} keys(%cloud_matches), keys(%all_matches),
+		keys(%blizz_matches))
+);
+my @combo_matches = (
+   "AND ", "ET ", "ET DE ",
+	"MIXED WITH ", "MELEE DE ", "MELE DE ", "MELEES D'", "MELEES DE ",
+	"OR ", "OU ",
+	"BECOMING MIXED WITH ", "DEVENANT MELEE DE ", "DEVENANT MELEE D'",
+	"DEVENANT MELEES DE ", "DEVENANT MELEES D'",
+	"AT TIMES MIXED WITH ", "PARFOIS MELEE DE ", 
+	"TO ", "BECOMING ", 
+);
+my $combo_str = join('|', sort({length($b) <=> length($a)} @combo_matches));
+my $combo_re = qr/$combo_str/i;
+my $ra_str = join('|',
+   sort({length($b) <=> length($a)} keys(%ra_matches), keys(%rash_matches),
+		keys(%dz_matches), keys(%sh_matches))
+);
+my $sn_str = join('|',
+   sort({length($b) <=> length($a)} keys(%sn_matches), keys(%snsh_matches))
+);
+my $rasn_re = qr/((?:(?:$sn_str)\s(?:$combo_str)(?:$ra_str))|(?:(?:$ra_str)\s(?:$combo_str)(?:$sn_str))|(QUELQUES )?(?:AVERSES DE (?:NEIGE|PLUIE)( (?:PARFOIS FORTES|FONDANTE))? (?:OU|ET) DE (?:PLUIE|NEIGE)( (?:PARFOIS FORTES|FONDANTE))?))/;
+my $chance_re = qr/(\d\d) (?:PERCENT CHANCE OF |POUR CENT DE PROBABILITE (?:DE |D'))/;
+my $chance_rasn_re = qr/($chance_re)($rasn_re)/;
+
+my %impact_matches=();
+tie(%impact_matches, 'Tie::IxHash');
+%impact_matches=(%ts_matches,%blizz_matches,%fzra_matches,%fzdz_matches,%gr_matches,%pl_matches);
+my %impact_priority = ();
+$counter = 1;
+foreach my $c (values(%impact_matches)) {
+	next if (exists($impact_priority{$c}));
+	$impact_priority{$c} = $counter;
+	$counter++;
+}
+
+my %non_impact_matches = ();
+tie(%non_impact_matches, 'Tie::IxHash');
+%non_impact_matches = (%sn_matches, %snsh_matches, %ra_matches, %rash_matches,
+	%dz_matches, %sh_matches);
+my %non_impact_priority = ();
+$counter = 1;
+foreach my $c (WX_RASN_AND, values(%non_impact_matches)) {
+	next if (exists($non_impact_priority{$c}));
+	$non_impact_priority{$c} = $counter;
+	$counter++;
+}
+
+my $impact_str = join('|', sort({length($b) <=> length($a)} keys(%impact_matches)));
+my $non_impact_str = join('|', sort({length($b) <=> length($a)} keys(%non_impact_matches)));
+
+my @local_effects = (
+	"A FEW LOCAL SNOW SQUALLS",
+	"LOCAL SNOW SQUALLS", "BOURRASQUES DE NEIGE PAR ENDROITS",
+	"LOCAL BLOWING SNOW", "POUDRERIE PAR ENDROITS",
+	"LOCAL SMOKE", "FUMEE PAR ENDROITS",
+	"LOCAL DRIFTING SNOW", "POUDRERIE BASSE PAR ENDROITS",
+	"POUDRERIE BASSE PAR ENDROITS ET PASSAGERE",
+	"THUNDERSTORMS IN A FEW LOCALITIES",
+	"ORAGES PAR ENDROITS",
+);
+
+my $local_effects_str = join("|", @local_effects);
+my $local_effects_re = qr/$local_effects_str/;
+
+my $all_str = join('|',
+	sort({length($b) <=> length($a)} keys(%impact_matches), keys(%non_impact_matches),
+		keys(%obstruction_matches), keys(%wrn_matches), @local_effects)
+);
+my $mix_re = qr/($chance_re)?(?:($all_str)\s(?:$combo_str)($all_str)(?:\s(?:$combo_str)($all_str))?)/;
+
+my $location_re = qr/\s(?:OVER |INLAND|NEAR |ALONG |LE LONG |IN ONSHORE WINDS|IN |KITIMAT (?:TO|A) TERRACE|ACROSS |SUR LES |EN TERRAINS|SUR LE |SUR L'|PRES D[E|U]|DANS LES |A L'INTERIEUR|DANS LE |AU NORD|NORTH OF|DU COTE|SOUS LES |EN PERIPHERIE|A WHALE|EN )/;
+
+my $chance_impact_re = qr/(RISK OF |RISQUE DE |RISQUE D'|$chance_re)($impact_str)(?!$location_re)/;
+my $chance_non_impact_re = qr/($chance_re)($non_impact_str)(?!$location_re)/;
+
+my $time_re = qr/(?: (?:AND|ET) )?(?:ENDING |BEGINNING |AT TIMES |DEBUTANT ET CESSANT |CESSANT |DEBUTANT )?(?:BEFORE |AFTER |NEAR |APRES |VERS )?(?:LATER |EARLY |LATE |TARD |TOT )?(?:IN THE |THIS |EN |CET |ET )?(?:CE MATIN|LE MATIN|MATIN|EVENING|OVERNIGHT|MIDNIGHT|NOON|MORNING|AFTERNOON|BEGINNING|MINUIT|PAR LA SUITE|CE SOIR|AU COURS DE LA NUIT|MI-JOURNEE|APRES-MIDI|SOIREE|FIN DE NUIT)(?: AND ENDING)?/;
+
+my $split_re = qr/ (?:BEGINNING CHANGING TO|THEN CHANGING THROUGH|CHANGING THROUGH|AND WITH|THEN CHANGING BACK TO|AND THEN CHANGING TO|THEN CHANGING TO|THEN TO|AND THEN|CHANGING TO|THEN|(?<!MIXED )WITH |OTHERWISE|ET REDEVENANT EN|ET PUIS SE CHANGEANT EN|PUIS SE CHANGEANT EN|SE CHANGEANT EN|PUIS EN|SUIVI D'|SUIVI DE|ET AVEC|AVEC|PUIS)/;
+
+my $ignore_re = qr/SNOW LEVEL|AMOUNT \d*|ACCUMULATION D|HAUTEUR DE PLUIE|NIVEAU D'ENNEIGEMENT/;
+
+sub code_to_data {
+	my $cref = shift;
+	my $code = $cref;
+	my $chance = 100;
+	my $color = undef;
+	if (ref($cref) eq "ARRAY") {
+		($code, $chance, $color) = @{$cref};
+	}
+
+	return undef unless (defined($code));
+	my ($type, $modifier) = split('\.', $code);
+	$type = 0 unless ($type);
+	$modifier = 0 unless ($modifier);
+	my $ref = $code2str[$type]->[$modifier];
+	return undef unless ($ref);
+	return undef unless ($type == $ref->{type} && $modifier == $ref->{modifier});
+	$ref->{chance} = $chance;
+	$ref->{chance_color} = $color if ($color);
+	return $ref;
+}
+
+sub code_to_string {
+	my ($code, $day) = @_;
+
+	my $data = code_to_data($code);
+	if (defined($day) && $day > 0 && $code >= SKY_CLR) {
+		my $tdata = code_to_data($code+0.3);
+		$data = $tdata if ($tdata);
+	}
+	my $str = (defined($data)) ? __($data->{description}) : undef;
+	return $str;
+}
+
+sub cld_token_to_code {
+	my ($token) = @_;
+
+	#FIXME: need a way to indicate presence of TCU|CB in strings
+	return SKY_FEW if ($token =~ /-OVC/o);
+	return SKY_OVC if ($token =~ /OVC/o);
+	return SKY_FEW if ($token =~ /-BKN/o);
+	return SKY_MCLDY if ($token =~ /BKN/o);
+	return SKY_CLDY if ($token =~ /VV/o || $token =~ /(?:P|W)\d+X/);
+	return SKY_SCT if ($token =~ /SCT/o);
+	return SKY_MCLR if ($token =~ /FEW/o);
+	return undef if ($token =~ /CLR BLO|M/o);
+	return SKY_CLR if ($token =~ /CLR|SKC|NCD|NSC/o);
+	return undef;
+}
+
+sub opacity_to_code {
+	my ($opacity) = @_;
+
+	return undef if ($opacity < 0);
+	return SKY_CLR if ($opacity <= 1);
+	return SKY_MCLR if ($opacity == 2);
+	return SKY_FEW if ($opacity == 3);
+	return SKY_SCT if ($opacity == 4);
+	return SKY_MIX if ($opacity == 5);
+	return SKY_PCLDY if ($opacity == 6);
+	return SKY_MCLDY if ($opacity <= 8);
+	return SKY_CLDY if ($opacity == 9);
+	return SKY_OVC if ($opacity == 10);
+	return undef;
+}
+
+sub wmo_table_to_code {
+	my ($wmo_code, $table) = @_;
+
+	my $lgt=0.1; my $hvy=0.2; my $re=0.3; my $vc=0.4;
+
+	my %wmo_tables = (
+		2700 => [
+			SKY_CLR, SKY_MCLR, SKY_MCLR, SKY_FEW, SKY_SCT, SKY_MIX, SKY_MCLDY,
+				SKY_CLDY, SKY_OVC, undef,
+		],	
+		4561 => [
+			undef, undef, undef, WX_BLSN+$re, WX_FG+$re, WX_DZ+$re, WX_RA+$re,
+				WX_SN+$re, WX_SH+$re, WX_TS+$re,
+		],
+		4531 => [
+			undef, undef, undef, WX_FG+$re, WX_UP+$re, WX_DZ+$re, WX_RA+$re, WX_SN+$re,
+				WX_SH+$re, WX_TS+$re,
+		],
+		4677 => [
+			undef, undef, undef, undef, WX_FU, WX_HZ, WX_DU, WX_BLDU, WX_PO, WX_DS+$re,
+			WX_BR, WX_MIFG, WX_MIFG, WX_LT, WX_UP+$vc, WX_UP+$vc, WX_UP+$vc, WX_TH, WX_SQ,
+				WX_FC,
+			WX_DZ+$re, WX_RA+$re, WX_SN+$re, WX_RASN_AND+$re, WX_FZRADZ_OR+$re,
+				WX_RASH+$re, WX_SNSH+$re, WX_GR+$re, WX_FG+$re, WX_TS+$re,
+			WX_DS+.5, WX_DS, WX_DS+.6, WX_DS+.7, WX_DS+$hvy, WX_DS+.8, WX_DRSN,
+				WX_DRSN+$hvy, WX_BLSN, WX_BLSN+$hvy,
+			WX_FG+$vc, WX_BCFG, WX_FG+.5, WX_FG+.7, WX_FG+.5, WX_FG, WX_FG+.6, WX_FG+.6,
+				WX_FZFG+.5, WX_FZFG,
+			WX_DZ+$lgt, WX_DZ+$lgt, WX_DZ, WX_DZ, WX_DZ+$hvy, WX_DZ+$hvy,
+				WX_FZDZ+$lgt, WX_FZDZ+$hvy, WX_RADZ_AND+$lgt, WX_RADZ_AND+$hvy,
+			WX_RA+$lgt, WX_RA+$lgt, WX_RA, WX_RA, WX_RA+$hvy, WX_RA+$hvy,
+				WX_FZRA+$lgt, WX_FZRA+$hvy, WX_RASN_AND+$lgt, WX_RASN_AND+$hvy,
+			WX_SN+$lgt, WX_SN+$lgt, WX_SN, WX_SN, WX_SN+$hvy, WX_SN+$hvy, WX_IC,
+				WX_SG, WX_SC, WX_PL,
+			WX_RASH+$lgt, WX_RASH+$hvy, WX_RASH+.5, WX_RASNSH_AND+$lgt,
+				WX_RASNSH_AND+$hvy, WX_SNSH+$lgt, WX_SNSH+$hvy, WX_GS+$lgt, WX_GS+$hvy,
+				WX_GR+$lgt,
+			WX_GR+$hvy, WX_RA+.6, WX_RA+.7, WX_GR+.6, WX_GR+.7, WX_TSRA, WX_TSGR,
+				WX_TSRA+$hvy, WX_TSDS, WX_TSGR+$hvy,
+		],
+		4680 => [
+			undef, undef, undef, undef, WX_HZ, WX_HZ, undef, undef, undef, undef,
+			WX_BR, WX_IC, WX_LT, undef, undef, undef, undef, undef, WX_SQ, undef,
+			WX_FG+$re, WX_UP+$re, WX_DZ+$re, WX_RA+$re, WX_SN+$re, WX_FZRADZ_OR+$re,
+				WX_TS+$re, WX_BLSN, WX_BLSN, WX_BLSN, 
+			WX_FG, WX_BCFG, WX_FG+.7, WX_FG, WX_FG+.6, WX_FZFG, undef, undef, undef,
+				undef,
+			WX_UP, WX_UP, WX_UP+$hvy, WX_RADZ_OR, WX_RADZ_OR+$hvy, WX_SNUP_AND,
+				WX_SNUP_AND+$hvy, WX_FZRADZ_OR, WX_FZRADZ_OR+$hvy, undef,
+			WX_DZ, WX_DZ+$lgt, WX_DZ, WX_DZ+$hvy, WX_FZDZ+$lgt, WX_FZDZ,
+				WX_FZDZ+$hvy, WX_RADZ_AND+$lgt, WX_RADZ_AND+$hvy, undef,
+			WX_RA, WX_RA+$lgt, WX_RA, WX_RA+$hvy, WX_FZRA+$lgt, WX_FZRA, WX_FZRA+$hvy,
+				WX_RASN_AND+$lgt, WX_RASN_AND+$hvy, undef,
+			WX_SN, WX_SN+$lgt, WX_SN, WX_SN+$hvy, WX_PL+$lgt, WX_PL, WX_PL+$re, WX_SG,
+				WX_IC, undef,
+			WX_SH, WX_RASH+$lgt, WX_RASH, WX_RASH+$hvy, WX_RASH+.5, WX_SNSH+$lgt,
+				WX_SNSH, WX_SNSH+$hvy, undef, WX_GR,
+			WX_TS, WX_TH, WX_TSRA, WX_TSGR, WX_TH+$hvy, WX_TSRA+$hvy, WX_TSGR+$hvy, undef,
+				undef, WX_FC,
+		],
+	);
+
+	return $wmo_tables{$table}->[$wmo_code];
+}
+
+sub wx_token_to_code {
+	my ($token, $sao) = @_;
+	my @codes = ();
+
+	my %intensity_matches = (
+		DZ => WX_DZ, FZDZ => WX_FZDZ, DZRA => WX_RADZ_AND, RADZ => WX_RADZ_AND,
+		RA => WX_RA, FZRA => WX_FZRA, RASN => WX_RASN_AND, SNRA => WX_RASN_AND,
+		SN => WX_SN, BLSN => WX_BLSN, DRSN => WX_DRSN, RASN => WX_RASN_AND,
+		SNRA => WX_RASN_AND, SNUP => WX_SNUP_AND, UPSN => WX_SNUP_AND,
+		SG => WX_SG, IC => WX_IC, SC => WX_SC, PL => WX_PL, GR => WX_GR, GS => WX_GS,
+		SHRA => WX_RASH, SHSN => WX_SNSH, SHPL => WX_PL, SHGS => WX_GS, SHGR => WX_GR,
+		RASH => WX_RASH, SNSH => WX_SNSH, PLSH => WX_PL, GSSH => WX_GS, GRSH => WX_GR,
+		SHIC => WX_IC, ICSH => WX_IC, SHSG => WX_SG, SGSH => WX_SG, SHDZ => WX_DZ, DZSH => WX_DZ,
+		SHRASN => WX_RASNSH_AND, SHSNRA => WX_RASNSH_AND, SHUP => WX_UP, SH => WX_SH,
+		TS => WX_TH, TSRA => WX_TSRA, TSSN => WX_TSSN, TSPL => WX_TSPL, TSGS => WX_TSGS,
+		TSGR => WX_TSGR, TSUP => WX_TS, TSRASN => WX_TSRASN_AND, TSSNRA => WX_TSRASN_AND,
+		LT => WX_LT, UP => WX_UP, PO => WX_PO, FC => WX_FC, DS => WX_DS, SS => WX_DS,
+		BLDU => WX_BLDU, DRDU => WX_DRDU, BLSA => WX_BLDU, DRSA => WX_DRDU,
+	);
+
+	my %other_matches = (
+			BR => WX_BR, FG => WX_FG, FZFG => WX_FZFG, FU => WX_FU, VA => WX_VA, DU => WX_DU,
+			SA => WX_DU, HZ => WX_HZ, SQ => WX_SQ, MIFG => WX_MIFG, BCFG => WX_BCFG,
+			PRFG => WX_PRFG,
+		);
+
+	my %matches = (
+		SH => WX_SH, DZ => WX_DZ, FZDZ => WX_FZDZ, RA => WX_RA, SHRA => WX_RASH,
+		FZRA => WX_FZRA, SN => WX_SN, BLSN => WX_BLSN, DRSN => WX_DRSN, SHSN => WX_SNSH,
+		SG => WX_SG, IC => WX_IC, SC => WX_SC, PL => WX_PL, GR => WX_GR, GS => WX_GS,
+		BR => WX_BR, FG => WX_FG, FZFG => WX_FZFG, FU => WX_FU, VA => WX_VA, DU => WX_DU,
+		SA => WX_DU, BLDU => WX_BLDU, DRDU => WX_DRDU, BLSA => WX_BLDU, DRSA => WX_DRDU,
+		HZ => WX_HZ, PO => WX_PO, SQ => WX_SQ, FC => WX_FC, DS => WX_DS, SS => WX_DS,
+		TS => WX_TH, UP => WX_UP, LT => WX_LT, MIFG => WX_MIFG, BCFG => WX_BCFG,
+		PRFG => WX_PRFG, TSRA => WX_TSRA, TSSN => WX_TSSN, TSPL => WX_TSPL, TSGS => WX_TSGS,
+		TSGR => WX_TSGR, SHUP => WX_UP, TSUP => WX_TS, SHGS => WX_GS, SHGR => WX_GR,
+		SHPL => WX_PL, SNUP => WX_SNUP_AND, UPSN => WX_SNUP_AND, DZRA => WX_RADZ_AND,
+		RADZ => WX_RADZ_AND, RASN => WX_RASN_AND, SNRA => WX_RASN_AND, SHRASN => WX_RASNSH_AND,
+		SHSNRA => WX_RASNSH_AND,
+	);
+
+	my %sao_matches = (
+		TORNADO => WX_FC, FUNNEL => WX_FC, SQUALL => WX_SQ, LTNG => WX_LT,
+		DFTS => WX_DRSN, IP => WX_PL, PE => WX_PL, PL => WX_PL, SP => WX_GS, IF => WX_FZFG,
+		ZL => WX_FZDZ, ZR => WX_FZRA, BS => WX_BLSN, F => WX_FG, H => WX_HZ, K => WX_FU,
+		L => WX_DZ, P => WX_UP, R => WX_RA, S => WX_SN, T => WX_TS, A => WX_GR, W => WX_SH,
+	);
+
+	my $prefix="";
+	if ($sao) {
+		my $match_str = join('|', sort({length($b) <=> length($a)} keys(%sao_matches)));
+		my $sao_re = qr/(TORNADO|FUNNEL|SQUALL|LTNG|DFTS|
+			IP|IC|PE|PL|SP|IF|ZL|ZR|BS|
+			F|H|K|L|P|R|S|T|A|W)(-{1,2}|\+)?/x;
+		while ($token =~ /$sao_re/go) {
+			my $tok = $1; $prefix = $2 if ($2);
+			my $intensity = 0;
+			if ($prefix eq "-") {
+				$intensity = 0.1;
+			} elsif ($prefix eq "--") {
+				$intensity = 0.5;
+			} elsif ($prefix eq "+") {
+				$intensity = 0.2;
+			}
+			next unless (exists($sao_matches{$tok}));
+			push(@codes, $sao_matches{$tok}+$intensity);
+		}
+	} else {
+		my $match_str = join('|', 
+			sort({length($b) <=> length($a)} keys(%intensity_matches),  keys(%matches)));
+		my $metar_re = qr/($match_str)/;
+		if ($token =~ /^(\+|-|VC|RE)?(.*)/o) {
+			$prefix = $1 if ($1);
+			my $str = $2;
+			my $intensity = 0;
+			my $modifier = 0;
+			if ($prefix eq "RE") {
+				$modifier = 0.3;
+			} elsif ($prefix eq "VC") {
+				$modifier = 0.4;
+			}
+			if ($prefix eq "-") {
+				$intensity = 0.1;
+			} elsif ($prefix eq "--") {
+				$intensity = 0.5;
+			} elsif ($prefix eq "+") {
+				$intensity = 0.2;
+			} elsif ($prefix eq "RE") {
+				$intensity = 0.3;
+			} elsif ($prefix eq "VC") {
+				$intensity = 0.4;
+			}
+			while ($str =~ /$metar_re/go) {
+				my $tok = $1;
+				if (exists($intensity_matches{$tok})) {
+					push(@codes, $intensity_matches{$tok}+$intensity);
+				} elsif (exists($other_matches{$tok})) {
+					push(@codes, $other_matches{$tok}+$modifier);
+				}
+			}	
+		}
+	}
+
+	return @codes;
+}
+
+sub plain_language_to_wrng_codes {
+   my $str = shift;
+   my @codes;
+   my @sentences = split(/\./o, $str);
+
+   for my $s (@sentences){
+      for my $key (keys(%wrn_matches)){
+         if (exists $wrn_matches{$key}->{match} and $s =~ $wrn_matches{$key}->{match}){
+            if (exists $wrn_matches{$key}->{not_match} and $s =~ $wrn_matches{$key}->{not_match}){
+               next;
+            }
+
+            push @codes, $wrn_matches{$key}->{code};
+         }
+      }
+	}
+
+   if (scalar @codes < 1){
+      push @codes, WRN_DEFAULT;
+   }
+
+   return @codes;
+}
+
+sub plain_language_to_codes {
+	my $str = shift;
+	my $cld_code = undef;
+	my @sentences = split(/\./o, $str);
+	my @sky_codes = ();
+	my @obst_codes = ();
+	my @impact = (0, 0);
+	my @non_impact = (0, 0);
+	my @codes = ();
+
+	sub combine_impact {
+		my ($current, $new, %ip) = @_;
+		return @{$new} unless (exists($impact_priority{$current->[0]}));
+		return @{$current} unless (exists($impact_priority{$new->[0]}));
+		my @sorted = sort({
+			my $ac = $a->[0]; my $bc = $b->[0];
+			if (int($ac) == int($bc)) {
+				return $b->[1] <=> $a->[1];
+			} else {
+				return $impact_priority{$ac} <=> $impact_priority{$bc};
+			}
+		} $current, $new);
+		return @{$sorted[0]};
+	}
+
+	sub combine_non_impact {
+		my ($current, $new, %ip) = @_;
+		return @{$new} unless (exists($non_impact_priority{$current->[0]}));
+		return @{$current} unless (exists($non_impact_priority{$new->[0]}));
+		my $ic = int($current->[0]); my $in = int($new->[0]);
+		if (($current->[1] eq $new->[1])
+			&& ((($ic == WX_RASH || $ic == WX_RA || $ic == WX_DZ || $ic == WX_SH) && ($in == WX_SNSH || $in == WX_SN))
+			|| (($ic == WX_SNSH || $ic == WX_SN) && ($in == WX_RASH || $in == WX_RA || $in == WX_DZ || $in == WX_SH)))
+		) { 
+			return (WX_RASN_AND, $current->[1]);
+		}
+		my @sorted = sort({
+			my $ac = $a->[0]; my $bc = $b->[0];
+			if ($b->[1] eq $a->[1]) {
+				return $non_impact_priority{$ac} <=> $non_impact_priority{$bc};
+			} else {
+				return $b->[1] <=> $a->[1];
+			}
+		} $current, $new);
+		return @{$sorted[0]};
+	}
+
+	#if we are processing for a warning object only need to do things in this block. Not worried about rest
+	if ($sentences[0] =~ qr/(warning entity:)/i){
+      for my $s (@sentences){
+         for my $key (keys(%wrn_matches)){
+            if (exists $wrn_matches{$key}->{match} and $s =~ $wrn_matches{$key}->{match}){
+               if (exists $wrn_matches{$key}->{not_match} and $s =~ $wrn_matches{$key}->{not_match}){
+                  next;
+               }
+
+               push @codes, $wrn_matches{$key}->{code};
+            }
+         }
+		}
+
+      if (scalar @codes < 1){
+         push @codes, WRN_DEFAULT;
+      }
+
+      return ($cld_code, @codes);
+	}
+
+	foreach my $s (@sentences) {
+		if ($s =~ /$match_str/o) {
+			$s = $1 if ($s =~ /(.*?)\s(?:EXCEPT|SAUF)/);
+			my @phrases = split(/$split_re/, $s);
+			foreach my $p (@phrases) {
+				$p =~ s/$time_re//g;
+				$p =~ s/^\s+|\s+$//g;
+				$p =~ s/\s{2,}/ /g;
+				next unless ($p);
+				MetManager::trace($TRACEID,9,"process '$p'");
+				if (exists($cloud_matches{$p})) {
+					MetManager::trace($TRACEID,9,"cloud match");
+					push(@sky_codes, $cloud_matches{$p});
+				} elsif ($p =~ /$mix_re/) {
+					MetManager::trace($TRACEID,9,"mix match");
+					push(@sky_codes, SKY_OVC);
+					my $chance = $2||100;
+					my ($t1, $t2, $t3) = ($3||'', $4||'', $5||'');
+					#print STDERR "$t1, $t2, $t3\n";
+					if (exists($impact_matches{$t1})) {
+						@impact = combine_impact(\@impact, [$impact_matches{$t1}, $chance]);
+					} 
+					if (exists($impact_matches{$t2})) {
+						@impact = combine_impact(\@impact, [$impact_matches{$t2}, $chance]);
+					}
+					if (exists($impact_matches{$t3})) {
+						@impact = combine_impact(\@impact, [$impact_matches{$t3}, $chance]);
+					}
+					if (exists($non_impact_matches{$t1})) {
+						@non_impact = combine_non_impact(\@non_impact,
+							[$non_impact_matches{$t1}, $chance]);
+					}
+					if (exists($non_impact_matches{$t2})) {
+						@non_impact = combine_non_impact(\@non_impact,
+							[$non_impact_matches{$t2}, $chance]);
+					}
+					if (exists($non_impact_matches{$t3})) {
+						@non_impact = combine_non_impact(\@non_impact,
+							[$non_impact_matches{$t3}, $chance]);
+					}
+					if (exists($obstruction_matches{$t1})) {
+						push(@obst_codes, $obstruction_matches{$t1});
+					}
+					if (exists($obstruction_matches{$t2})) {
+						push(@obst_codes, $obstruction_matches{$t2});
+					}
+					if (exists($obstruction_matches{$t3})) {
+						push(@obst_codes, $obstruction_matches{$t3});
+					}
+				} elsif ($p =~ /$chance_impact_re/) {
+					MetManager::trace($TRACEID,9,"chance of a impact match");
+					push(@sky_codes, SKY_OVC);
+					my $chance = $2||20;
+					@impact = combine_impact(\@impact, [$impact_matches{$3}, $chance]);
+					MetManager::trace($TRACEID,9,"new impact=".join("|",@impact));
+				} elsif ($p =~ $chance_rasn_re) {
+					my $code = WX_RASN_AND;
+					$code += $hvy if ($p =~ /$hvy_re/);
+					MetManager::trace($TRACEID,9,"chance of a rain/snow match");
+					push(@sky_codes, SKY_OVC);
+					my $chance = $2||0;
+					@non_impact = combine_non_impact(\@non_impact, [$code, $chance]);
+				} elsif (exists($impact_matches{$p})) {
+					MetManager::trace($TRACEID,9,"'$p' is a impact match");
+					push(@sky_codes, SKY_OVC);
+					@impact = combine_impact(\@impact, [$impact_matches{$p}, 100]);
+				} elsif ($p =~ $rasn_re) {
+					MetManager::trace($TRACEID,9,"rain/snow match");
+					my $code = WX_RASN_AND;
+					$code += $hvy if ($p =~ /$hvy_re/);
+					push(@sky_codes, SKY_OVC);
+					@non_impact = combine_non_impact(\@non_impact, [$code, 100]);
+				} elsif ($p =~ /$chance_non_impact_re/) {
+					MetManager::trace($TRACEID,9,"chance of a non impact match");
+					push(@sky_codes, SKY_OVC);
+					my $chance = $2||0;
+					@non_impact = combine_non_impact(\@non_impact,
+						[$non_impact_matches{$3}, $chance]);
+				} elsif (exists($non_impact_matches{$p})) {
+					MetManager::trace($TRACEID,9,"non impact match");
+					push(@sky_codes, SKY_OVC);
+					@non_impact = combine_non_impact(\@non_impact,
+						[$non_impact_matches{$p}, 100]);
+				} elsif (exists($obstruction_matches{$p})) {
+					MetManager::trace($TRACEID,9,"obstruction match");
+					push(@obst_codes, $obstruction_matches{$p});
+				} else {
+					MetManager::trace($TRACEID,9,"ignore it");
+					if ($p =~ /$match_str/o 
+						&& $p !~ /$local_effects_re/
+						&& $p !~ /$ignore_re/
+						&& $p !~ /$location_re/
+					) {
+						MetManager::trace($TRACEID,1,"'$p' doesn't match anything");
+					}
+				}
+			}
+		}
+	}
+
+	if (@sky_codes) {
+		if (@sky_codes > 2 || int($sky_codes[0]) == SKY_CLR) {
+			$cld_code = int(max(@sky_codes));
+		} elsif (@sky_codes == 2) {
+			if ($sky_codes[0] > $sky_codes[1]) {
+				if ($sky_codes[0] == SKY_INCR) {
+					$cld_code = SKY_MIX
+				} else {
+					$cld_code = int($sky_codes[0])+0.1;
+				}
+			} elsif ($sky_codes[0] < $sky_codes[1]) {
+				if ($sky_codes[0] == SKY_DECR) {
+					$cld_code = SKY_MIX
+				} else {
+					$cld_code = int($sky_codes[0])+0.2;
+				}
+			} else {
+				$cld_code = $sky_codes[0];
+			}
+		} else {
+			$cld_code = $sky_codes[0];
+		}
+		my $icc = int($cld_code);
+		$cld_code = $icc if ($icc == SKY_INCR || $icc == SKY_DECR);
+	}
+
+	if (@obst_codes) {
+		@obst_codes = sort({
+			return $obstruction_priority{$a} <=> $obstruction_priority{$b};
+		} @obst_codes);
+		push(@codes, $obst_codes[0]);
+	}
+
+	if ($impact[0]) {
+		$impact[1] = N__("RISK") if ($impact[1] == 20);
+		push(@codes, [@impact, 'red']);
+	} elsif ($non_impact[0]) {
+		push(@codes, [@non_impact, 'black']);
+	}
+
+	$cld_code = SKY_CLR unless ($cld_code || @codes);
+	return ($cld_code, @codes);
+}
+
+sub get_codes_from_sas {
+	my $data = shift;
+
+	my $cldcode = undef;
+	$cldcode = MetManager::conditions::opacity_to_code(0)
+		if (exists($data->{has_nsc}) || exists($data->{has_cavok}));
+
+	if (exists($data->{opacity})) {
+		$cldcode = MetManager::conditions::opacity_to_code($data->{opacity});
+	}
+
+	if (exists($data->{sky})) {
+		my $tcode = MetManager::conditions::cld_token_to_code($data->{sky});
+		$cldcode = $tcode if (defined($tcode) && (!defined($cldcode) || $tcode > $cldcode));
+	}
+
+	my @wx_codes = ();
+	my $is_sa = $data->{is_sa} || $data->{is_sp};
+	if (exists($data->{weather})) {
+		foreach my $tok (split(' ', $data->{weather})) {
+			push(@wx_codes, MetManager::conditions::wx_token_to_code($tok, $is_sa));
+		}
+	}
+
+	my @re_wx_codes = ();
+	if (exists($data->{recent_weather})) {
+		foreach my $tok (split(' ', $data->{recent_weather})) {
+			push(@re_wx_codes, MetManager::conditions::wx_token_to_code($tok, $is_sa));
+		}
+	}
+
+	my $present = [@wx_codes] if (@wx_codes);
+	my $recent = [@re_wx_codes] if (@re_wx_codes);
+	return ($cldcode, $present, $recent);
+}
+
+sub get_codes_from_sms {
+	my $sm = shift;
+	my $present_wx_table = 4677;
+	my $past_wx_table = 4561;
+	my $cldcode = undef;
+	my @wx_codes = ();
+	my @re_wx_codes = ();
+	my $ix = $sm->{s111}->{ix};
+	my $cld_n = $sm->{s111}->{cld_n};
+
+	return () if ((!defined($ix) || $ix == 3 || $ix == 6) && !defined($cld_n));
+
+	if (defined($ix)) {
+		if ($ix >= 4) {
+			$present_wx_table = 4680;
+			$past_wx_table = 4531;
+		}
+
+		my $ww = $sm->{s111}->{ww};
+		my $ww1 = $sm->{s111}->{ww1};
+		my $ww2 = $sm->{s111}->{ww2};
+		if (defined($ww) && $ww > 3) {
+			my @codes = MetManager::conditions::wmo_table_to_code($ww, $present_wx_table);
+			foreach my $c (@codes) {
+				next unless ($c);
+				if (($present_wx_table == 4677 && ($ww >= 20 && $ww < 30)) ||
+					($present_wx_table == 4680 && ($ww>= 20 && $ww < 27))
+				) {
+					push(@re_wx_codes, $c);
+				} else {
+					push(@wx_codes, $c);
+				}
+			}
+		}
+		unless (@re_wx_codes) {
+			if (defined($ww1) && $ww1 > 2) {
+				my @codes = MetManager::conditions::wmo_table_to_code($ww1, $past_wx_table);
+				foreach my $c (@codes) {
+					next unless ($c);
+					push(@re_wx_codes, $c);
+				}
+			}
+			if (defined($ww2) && $ww2 > 2) {
+				if (defined($ww1) && $ww1 eq $ww2) {
+					#no need to push the same code twice
+				} else {
+					my @codes = MetManager::conditions::wmo_table_to_code($ww2, $past_wx_table);
+					foreach my $c (@codes) {
+						next unless ($c);
+						push(@re_wx_codes, $c);
+					}
+				}
+			}
+		}
+	}
+
+	if (defined($cld_n)) {
+		$cldcode = MetManager::conditions::wmo_table_to_code($cld_n, 2700);
+	}
+
+
+	my $present = [@wx_codes] if (@wx_codes);
+	my $recent = [@re_wx_codes] if (@re_wx_codes);
+	return ($cldcode, $present, $recent);
+}
+
+sub build_timeframe_string {
+	my (@timeframes) = @_;
+	my $str = '';
+	if (@timeframes == 1) {
+		my $tf = $timeframes[0];
+		return build_string($tf->{daylight}, $tf->{cldcode}, $tf->{weather});
+	} else {
+	}
+}
+
+sub build_string {
+	my ($daylight, $cldcode, $present_wx, $recent_wx) = @_;
+	my @present_codes = @{$present_wx} if defined($present_wx);
+	my @recent_codes = @{$recent_wx} if defined($recent_wx);
+
+	return '' unless(defined($cldcode) || @present_codes);
+
+	# Make a string using cloud code and present weather info
+	my $cld_str = "";
+	$cld_str = MetManager::conditions::code_to_string($cldcode, $daylight)
+		if (defined($cldcode));
+
+	my @strs = ();
+	foreach my $c (@present_codes) {
+		push(@strs, MetManager::conditions::code_to_string($c, $daylight))
+			if (defined($c));
+	}
+
+	if (@strs) {
+		return (join(", ", @strs));
+	}
+	# Can't use present weather info, use cloud code and recent weather info instead
+	push @strs, $cld_str;
+	foreach my $c (@recent_codes) {
+		push(@strs, MetManager::conditions::code_to_string($c, $daylight))
+			if (defined($c));
+	}
+	@strs = grep {defined $_ and $_ ne ''} @strs;	
+	my $string = join(",", @strs);	
+	return $string;
+	
+}
+
+sub create_icon {
+	my ($daylight, $cldcode, $present_wx, $recent_wx, $bg, $scale_factor) = @_;
+	my @wx_codes = @{$present_wx} if defined($present_wx);
+
+	my $icon_dir = MetManager::dir('data')."/images/conditions/";
+	my $image = Graphics::Magick->new();
+	if ($cldcode) {
+		my $data = MetManager::conditions::code_to_data($cldcode);
+		$daylight = 1 if ($data->{modifier} == 3);
+	}
+
+	my ($nightbg, $daybg);
+	if (not $bg) {
+		($bg, $nightbg, $daybg) = (undef, undef, undef);
+	} elsif (ref($bg) eq 'ARRAY') {
+		($nightbg, $daybg) = @{$bg};
+	} else {
+		($nightbg, $daybg) = (qw/223366 BBCCFF/);
+	}
+
+	if (not defined $daylight) {
+		$image->Read(filename=>$icon_dir."Nightime_bg.ico");
+		$bg = $nightbg if defined $nightbg;
+	} elsif (ref($daylight) eq 'ARRAY') {
+		if ($daylight->[0] < 1) {
+			if ($daylight->[1] > 0) {
+				$image->Read(filename=>$icon_dir."Night_to_Day.ico");
+			} else {
+				$image->Read(filename=>$icon_dir."Nightime_bg.ico");
+			}
+			$bg = $nightbg if defined $nightbg;
+		} else {
+			if ($daylight->[-1] < 0) {
+				$image->Read(filename=>$icon_dir."Day_to_Night.ico");
+			} else {
+				$image->Read(filename=>$icon_dir."Daytime_bg.ico");
+			}
+			$bg = $daybg if defined $daybg;
+		}
+	} elsif ($daylight < 1) {
+		$image->Read(filename=>$icon_dir."Nightime_bg.ico");
+		$bg = $nightbg if defined $nightbg;
+	} else {
+		$image->Read(filename=>$icon_dir."Daytime_bg.ico");
+		$bg = $daybg if defined $daybg;
+	}
+
+	if (defined $bg) {
+		my $bg_image = Graphics::Magick->new(
+			size => $image->Get('width') . 'x' . $image->Get('height'));
+		$bg_image->Read('xc:#'.$bg);
+		$bg_image->Composite(compose => 'Over', image => $image);
+		$image->Composite(compose => 'Copy', image => $bg_image);
+	}
+
+	my $has_freezing=0;
+	my $need_cloud=0;
+	my $need_lt=0;
+	my $convective=0;
+	my $heavy=0;
+	my $obscuration_icon=undef;
+	my $need_icon=1;
+	my $state=0;
+	my $ctxt = '';
+	my $color = 'white';
+	foreach my $c (@wx_codes) {
+		next unless (defined($c));
+		my $data = MetManager::conditions::code_to_data($c);
+		next unless ($data);
+		$heavy=1 if ($data->{modifier} == 2 && $data->{flag} & PRECIPITATION);
+		$has_freezing=1 if ($data->{flag} & FREEZING);
+		$need_cloud=1 if ($data->{flag} & PRECIPITATION);
+		$convective=1 if ($data->{flag} & CONVECTIVE);
+		$need_lt=1 if ($data->{flag} & LIGHTNING);
+		if ($data->{flag} & OBSCURATION) {
+			$obscuration_icon = $data->{icon} unless ($obscuration_icon);
+			next;
+		}
+		if ($data->{type} == WX_BLZD) {
+			$obscuration_icon = "Pcpn_blowing_snow_heavy";
+			$heavy=$need_cloud=1;
+		}
+		my $timage = Graphics::Magick->new();
+		if ($data->{icon} && $need_icon) {
+			$need_icon = 1;
+			my $rc = $timage->Read(filename=>$icon_dir.$data->{icon}.'.ico');
+			$image->Composite(image=>$timage, compose => 'Over') unless $rc;
+		}
+		if ($data->{chance} eq "RISK") {
+			$ctxt = $data->{chance};
+			$color = $data->{chance_color} if ($data->{chance_color});
+		} elsif ($data->{chance} < 100) {
+			$ctxt = sprintf(" %d%% ", $data->{chance});
+			$color = $data->{chance_color} if ($data->{chance_color});
+		}
+	}
+
+	if ($need_lt) {
+		my $iconfile = $icon_dir."lightning.ico";
+		$iconfile = $icon_dir."frequent_lightning.ico" if ($heavy);
+		my $timage = Graphics::Magick->new();
+		my $rc = $timage->Read(filename=>$iconfile);
+		$image->Composite(image=>$timage, compose => 'Over') unless $rc;
+	}
+
+	if ($cldcode) {
+		my $data = MetManager::conditions::code_to_data($cldcode);
+		$state=$data->{flag} if ($data->{flag} & (INCREASING|DECREASING));
+		if ($data && $data->{icon}) {
+			my $icon = $data->{icon};
+			if ($convective) {
+				$icon =~ s/Clouds_/Clouds_cvctv_/og;
+			} elsif ($heavy) {
+				$icon = 'Clouds_ovc_with_hvy_pcpn';
+			}
+			my $timage = Graphics::Magick->new();
+			my $rc = $timage->Read(filename=>$icon_dir.$icon.'.ico');
+			$image->Composite(image=>$timage, compose => 'Over') unless $rc;
+		}
+	} elsif ($need_cloud || $convective) {
+		my $icon = "Clouds_bkn.ico";
+		$icon = "Clouds_cvctv_bkn.ico" if ($convective);
+		$icon = "Clouds_cvctv_ovc.ico" if ($heavy);
+		my $timage = Graphics::Magick->new();
+		my $rc = $timage->Read(filename=>$icon_dir.$icon);
+		$image->Composite(image=>$timage, compose => 'Over') unless $rc;
+	}
+
+	if ($obscuration_icon) {
+		my $timage = Graphics::Magick->new();
+		my $rc = $timage->Read(filename=>$icon_dir.$obscuration_icon.'.ico');
+		$image->Composite(image=>$timage, compose => 'Over') unless $rc;
+	}
+
+	if ($has_freezing) {
+		my $timage = Graphics::Magick->new();
+		my $rc = $timage->Read(filename=>$icon_dir."freezing.ico");
+		$image->Composite(image=>$timage, compose => 'Over') unless $rc;
+	}
+	unless ($ctxt) {
+		if ($state & INCREASING) {
+			my $timage = Graphics::Magick->new();
+			my $rc = $timage->Read(filename=>$icon_dir."increasing.ico");
+			$image->Composite(image=>$timage, compose => 'Over') unless $rc;
+		} elsif ($state & DECREASING) {
+			my $timage = Graphics::Magick->new();
+			my $rc = $timage->Read(filename=>$icon_dir."decreasing.ico");
+			$image->Composite(image=>$timage, compose => 'Over') unless $rc;
+		}
+	}
+
+	my $ps = 27;
+	my $xoffset = 20;
+	my $yoffset = 0;
+	if ($scale_factor) {
+		$ps*=$scale_factor;
+		$xoffset*=$scale_factor;
+		my ($w, $h) = $image->Get('width', 'height');
+		$image->Resize(width => $w*$scale_factor, height => $h*$scale_factor);
+	}
+	$image->Annotate(fill=>$color, gravity=>'center', pointsize=>$ps,
+		text => __($ctxt), geometry => "-$xoffset+$yoffset") if ($ctxt);
+	return $image;
+}
+
+1;
+__END__
+# Below is stub documentation for your module. You better edit it!
+
+=head1 NAME
+
+MetManager::conditons - Perl module for mapping of weather codes (METAR, synoptic, etc)
+into more plain language strings and icons
+
+=head1 DESCRIPTION
+
+=head2 FUNCTIONS
+
+=over
+
+=item code_to_string($code, $day)
+
+Takes a single code and an optional day indicator and returns the appropriate string.
+If the 'day' variable is passed and is greater than zero then it is considered daytime,
+otherwise nighttime is assumed
+
+=item cld_token_to_code($token)
+
+Takes a METAR style cloud description string (FEW, BKN, etc) and returns code which
+reflects the worst occurence. ie if the string was 'FEW020 BKN100', it would return the code
+for broken sky.  Returns undef if no match found.
+
+=item opacity_to_code($token)
+
+Takes a value between 0 and 10 (usually the opacity field from a METAR report) and returns a
+code.  Returns undef if value is not between 0 and 10.
+
+=item wmo_table_to_code($wmo_code, $table)
+
+Takes a WMO code value and a WMO code table and returns the appropriate code.  Returns undef
+if the WMO code is unused or doesn't exist.  It works on the following WMO code tables: 
+2700, 4561, 4531, 4677, 4680
+
+=item wx_token_to_code($token, $sao)
+
+Takes a METAR weather token and returns a list of the appropriate codes.  If the $sao flag
+is set, then it will work on the old SAO weather tokens.
+
+=item plain_language_to_codes($string)
+
+Takes a plain language string (like from a public forecast) and returns codes describing the situation.  First element in the returned list is the cloud/sky code (could be undef) while the rest are weather codes
+
+=item get_codes_from_sas($data)
+
+Takes a reference to a SAS data structure and returns an array with the following elements:
+a code indicating the sky condtion, a reference to an array of the codes representing the
+present weather, a reference to an array of the codes representing the past weather if any.
+The elements from the SAS data structure that are used are: has_nsc, opacity, sky, is_sa,
+is_sp, weather, recent_weather
+
+=item get_codes_from_sms($data)
+
+Takes a reference to a SMS data structure and returns an array with the following elements:
+a code indicating the sky condtion, a reference to an array of the codes representing the
+present weather, a reference to an array of the codes representing the past weather if any.
+The elements from the SMS data structure that are used are: s111->{ix}, s111->{cld_n},
+s111->{ww}, s111->{ww}, s111->{ww}
+
+=item build_string($daylight, $cldcode, $present_wx, $recent_wx)
+
+Takes a day indicator ($day < 0 equals night, $day > 0 equals day, 0 indicates unknown which
+currently gets treated as nighttime), the code describing the current sky conditions,
+a reference to an array containing all the present weather codes, a reference to an array
+containing all the recent weather codes.  It returns a string describing the situation.
+
+=item create_icon($day, $cldcode, $present_wx, $recent_wx, $bg)
+
+Takes a day indicator ($day == undef or <= 0 equals night, $day > 0 equals day, 0 indicates unknown which
+currently gets treated as nighttime); the code describing the current sky conditions;
+a reference to an array containing all the present weather codes; a reference to an array
+containing all the recent weather codes; and $bg which can be specified as a scalar or array-reference. 
+if specified as a scalar then undefined/zero means no-background and non-zero means do a background 
+using API defaults. If specified as an array reference then the caller has the option to
+pass the [nightbg, daybg] and each are specified as hexidecimal r/g/b string 'RRGGBB'. ie) '33CCFF'.
+The API returns a Graphics::Magick image object of the built icon that best represents the situation
+described by the values entered.
+
+=back
+
+=head1 AUTHOR
+
+ADS Trenton
+
+=head1 SEE ALSO
+
+perl
+
+=cut
