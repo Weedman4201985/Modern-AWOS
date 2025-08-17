@@ -92,7 +92,7 @@ A real-time weather dashboard for CYTR (Trenton Airport), built with Node.js and
 
   -cd Modern-AWOS(or wherever you cloned it to)
 
-  ./launcher.ps1 
+  - ./launcher.ps1 
 
   
 -In the Dashboard
