@@ -49,7 +49,7 @@ A real-time weather dashboard for CYTR (Trenton Airport), built with Node.js and
 ## 📦 Installation
 
 **PREREQUISITES**
-In order to successfully run the server you need:
+  -In order to successfully run the server you need:
   -the latest version of Powershell(v7)
   -latest LTS version of Node.js with Express. 
   -npm. If npm is missing it can be installed manually.
