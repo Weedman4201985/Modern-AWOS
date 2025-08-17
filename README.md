@@ -104,7 +104,7 @@ A real-time weather dashboard for CYTR (Trenton Airport), built with Node.js and
 
   
                     
-## Create a desktop link to the launcher/dashboard(RECOMMENDED)
+### Create a desktop link to the launcher/dashboard(RECOMMENDED)
 
 -Create a Desktop shorcut
 
@@ -114,7 +114,7 @@ A real-time weather dashboard for CYTR (Trenton Airport), built with Node.js and
 
 
 
-## To view the server and any other server routes type the following into your web browser of choice:
+### To view the server and any other server routes type the following into your web browser of choice:
 
 localhost:3000 - Main AWOS page
 
