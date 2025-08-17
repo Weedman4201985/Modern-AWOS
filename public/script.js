@@ -1,5 +1,14 @@
-let countdown = 60;
+let countdown = 30;
+let countdownTimer = null;
+
+let isPaused = false;
+
+
 let cachedAutoMetar = '';
+let awosReports = [];
+let currentReportIndex = -1;
+let autoRefreshEnabled = true;
+
 
 // Controls
 const countdownDisplay = document.getElementById('countdown');
@@ -15,16 +24,9 @@ function safeSetHtml(id, html) {
     const el = document.getElementById(id);
     if (el) el.innerHTML = html;
 }
-
-function parseAWOSTime(str) {
-    // Format: YYYYMMDD.HHMMSS
-    const match = str.match(/^(\d{4})(\d{2})(\d{2})\.(\d{2})(\d{2})(\d{2})$/);
-    if (!match) return new Date();
-    const [, y, m, d, h, min, s] = match.map(Number);
-    return new Date(Date.UTC(y, m - 1, d, h, min, s));
+function getOfficialMetar(data) {
+    return data?.official?.metar?.raw || 'METAR not available';
 }
-
-
 function toDMS(deg, isLat) {
     if (typeof deg !== 'number') return '--';
     const abs = Math.abs(deg);
@@ -49,6 +51,7 @@ function calcWetBulb(tempC, dewC) {
 }
 
 async function fetchAWOS() {
+    if (!autoRefreshEnabled) return;
     try {
         const res = await fetch('/latest-awos');
         const data = await res.json();
@@ -61,15 +64,24 @@ async function fetchAWOS() {
         const nextExpected = new Date(reportTime.getTime() + 60000); // +60 sec
         const now = new Date();
         const delayMs = Math.max(nextExpected - now, 10000); // minimum 10s
-
         countdown = Math.floor(delayMs / 1000);
         setTimeout(fetchAWOS, delayMs);
+
+
     } catch (err) {
         console.error('AWOS fetch failed:', err);
         countdown = 60; // fallback
         setTimeout(fetchAWOS, 60000);
     }
 }
+function parseAWOSTime(str) {
+    // Format: YYYYMMDD.HHMMSS
+    const match = str.match(/^(\d{4})(\d{2})(\d{2})\.(\d{2})(\d{2})(\d{2})$/);
+    if (!match) return new Date();
+    const [, y, m, d, h, min, s] = match.map(Number);
+    return new Date(Date.UTC(y, m - 1, d, h, min, s));
+}
+
 
 function updateUI(data) {
     // Header
@@ -130,16 +142,16 @@ function updateUI(data) {
     safeSetText('lightning', data.lightning);
     safeSetText('closest-strike', data.closestStrike || 'n/a');
 }
+
 function updateCountdown() {
-    countdownDisplay.textContent = `${countdown}`;
+    if (!autoRefreshEnabled) return;
+    countdownDisplay.textContent = countdown;
     countdown--;
+
     if (countdown < 0) {
-        fetchAWOS();
-        countdown = 60;
+        clearInterval(countdownTimer); // ✅ Stop the timer
+        fetchHistory();                // ✅ Refresh data
     }
-}
-function getOfficialMetar(data) {
-    return data?.official?.metar?.raw || 'METAR not available';
 }
 
 function showModal() {
@@ -166,7 +178,6 @@ function closeModal() {
     document.getElementById('xmlModal').style.display = 'none';
 }
 
-// Full data modal content
 function openFullDataModal() {
     const d = window.__awos;
     if (!d) return;
@@ -206,9 +217,130 @@ function openFullDataModal() {
     document.getElementById('fullDataModal').style.display = 'block';
 }
 
-setInterval(updateCountdown, 1000);
+async function fetchHistory() {
+    try {
+        const res = await fetch('/awos-history');
+        const data = await res.json();
+        const newCount = awosReports.filter(r => r.isNew).length;
+        awosReports = data;
+        for (let i = 1; i < awosReports.length; i++) {
+            awosReports[i].isNew = isReportNew(awosReports[i], awosReports[i - 1]);
+        }
+        currentReportIndex = awosReports.length - 1;
+        updateUI(awosReports[currentReportIndex]);
+        updateReportIndex();
+        console.log(`${newCount} of ${awosReports.length} reports contained new data`);
+    } catch (err) {
+        console.error('Fetch failed:', err);
+    }
+
+    // ✅ Reset countdown safely
+    clearInterval(countdownTimer);   // Stop any previous timer
+    countdown = 30;
+    countdownDisplay.textContent = countdown;
+    if (autoRefreshEnabled) {
+        countdownTimer = setInterval(updateCountdown, 1000);
+    }
+}
+
+function updateReportIndex() {
+    const total = awosReports.length;
+    const current = currentReportIndex + 1;
+    const report = awosReports[currentReportIndex];
+    const timeStr = formatReportTime(report?.reportTime);
+    const statusStr = report?.isNew ? 'New Data' : 'No Change';
+
+    // Update individual spans
+    document.getElementById('report-number').textContent = current;
+    document.getElementById('report-total').textContent = total;
+    document.getElementById('report-time-label').textContent = timeStr;
+
+    const statusEl = document.getElementById('report-status');
+    statusEl.textContent = statusStr;
+
+    // Apply color class
+    statusEl.className = report?.isNew ? 'status-new' : 'status-unchanged';
+
+    // Add paused label if needed
+    if (!autoRefreshEnabled) {
+        statusEl.textContent += ' (Paused)';
+    }
+}
+
+
+
+function formatReportTime(raw) {
+    if (!raw || raw.length !== 15) return '--';
+    const year = raw.slice(0, 4);
+    const month = raw.slice(4, 6);
+    const day = raw.slice(6, 8);
+    const hour = raw.slice(9, 11);
+    const minute = raw.slice(11, 13);
+    const second = raw.slice(13, 15);
+    return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+}
+
+function showFirstReport() {
+    if (awosReports.length) {
+        currentReportIndex = 0;
+        updateUI(awosReports[currentReportIndex]);
+        updateReportIndex();
+    }
+}
+function showPrevReport() {
+    if (currentReportIndex > 0) {
+        currentReportIndex--;
+        updateUI(awosReports[currentReportIndex]);
+        updateReportIndex();
+    }
+}
+function showNextReport() {
+    if (currentReportIndex < awosReports.length - 1) {
+        currentReportIndex++;
+        updateUI(awosReports[currentReportIndex]);
+        updateReportIndex();
+    }
+}
+function showLastReport() {
+    if (awosReports.length) {
+        currentReportIndex = awosReports.length - 1;
+        updateUI(awosReports[currentReportIndex]);
+        updateReportIndex();
+    }
+}
+
+function toggleAutoRefresh() {
+    autoRefreshEnabled = !autoRefreshEnabled;
+    const btn = document.getElementById('pauseReport');
+    btn.textContent = autoRefreshEnabled ? '⏸️ Pause' : '▶️ Resume';
+
+    const indexEl = document.getElementById('report-index');
+    if (indexEl) {
+        updateReportIndex(); // this will append "(Paused)" if needed
+    }
+}
+
+function isReportNew(current, previous) {
+    if (!current || !previous) return false;
+
+    return (
+        current.temperature !== previous.temperature ||
+        current.dewPoint !== previous.dewPoint ||
+        current.relativeHumidity !== previous.relativeHumidity ||
+        current.wind?.['2min']?.mag !== previous.wind?.['2min']?.mag ||
+        current.wind?.['2min']?.speed !== previous.wind?.['2min']?.speed ||
+        current.visibility?.m !== previous.visibility?.m ||
+        current.cloud !== previous.cloud ||
+        current.altimeter !== previous.altimeter
+    );
+}
+
+if (!autoRefreshEnabled) {
+    indexEl.textContent += ' (Paused)';
+}
+
 // Event wiring
-refreshButton.addEventListener('click', fetchAWOS);
+refreshButton.addEventListener('click', fetchHistory);
 darkToggle.addEventListener('click', () => {
     document.body.classList.toggle('dark');
 });
@@ -217,6 +349,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const modal = document.getElementById('metarTafModal');
     const btn = document.getElementById('metar-taf-toggle');
     const close = document.getElementById('metarTafClose');
+    const chkNewFilter = document.getElementById('filter-new-only');
+
+    let filteredReports = [];
+
+    function bindButtons() {
+        document.getElementById('firstReport').onclick = showFirstReport;
+        document.getElementById('prevReport').onclick = showPrevReport;
+        document.getElementById('nextReport').onclick = showNextReport;
+        document.getElementById('lastReport').onclick = showLastReport;
+        document.getElementById('pauseReport').onclick = toggleAutoRefresh;
+    }
+
+    chkNewFilter.addEventListener('change', (e) => {
+        const showOnlyNew = e.target.checked;
+        filteredReports = showOnlyNew
+            ? awosReports.filter(r => r.isNew)
+            : awosReports;
+
+        currentReportIndex = filteredReports.length - 1;
+        updateUI(filteredReports[currentReportIndex]);
+        updateReportIndex();
+    });
 
     btn.addEventListener('click', async () => {
         const isOpen = getComputedStyle(modal).display !== 'none';
@@ -228,12 +382,19 @@ document.addEventListener('DOMContentLoaded', () => {
             safeSetText('modal-official-metar', 'Loading METAR...');
             safeSetText('modal-taf', 'Loading TAF...');
 
-            // On modal open
-            const d = window.__awos || {};
-            safeSetText('modal-official-metar', d?.official?.metar?.raw || 'METAR not available');
-            safeSetText('modal-taf', 'TAF not available');
-            safeSetText('modal-taf', d?.official?.taf?.raw || 'TAF not available');
-            safeSetText('modal-taf-issued', d?.official?.taf?.issued || '');
+            try {
+                const res = await fetch('/latest-awos');
+                const d = await res.json();
+                window.__awos = d;
+
+                safeSetText('modal-official-metar', d?.official?.metar?.raw || 'METAR not available');
+                safeSetText('modal-taf', d?.official?.taf?.raw || 'TAF not available');
+                safeSetText('modal-taf-issued', d?.official?.taf?.issued || '');
+            } catch (err) {
+                console.error('AWOS fetch failed:', err);
+                safeSetText('modal-official-metar', 'METAR fetch error');
+                safeSetText('modal-taf', 'TAF fetch error');
+            }
         }
     });
 
@@ -255,7 +416,11 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.textContent = '📄 View METAR/TAF';
         }
     });
+
+    // Initial fetch and button binding
+    fetchHistory();
+    bindButtons();
 });
 
 // Initial load
-fetchAWOS();
+fetchHistory(); // Load history and start at latest

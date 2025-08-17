@@ -1,9 +1,12 @@
-Import-Module "$PSScriptRoot\server-config\logger.psm1"
+Import-Module $PSScriptRoot "server-config\logger.psm1"
+
 $loggerModulePath = Join-Path $PSScriptRoot "server-config\logger.psm1"
 if (Test-Path $loggerModulePath) {
-    Import-Module $loggerModulePath -Force
-} else {
-    Write-Host "Logger module not found at $loggerModulePath" -ForegroundColor Red
+    try {
+        Import-Module $loggerModulePath -Force
+    } catch {
+        Write-Host "Failed to import logger module: $_" -ForegroundColor Red
+    }
 }
 
 $scriptPath = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $PSCommandPath }
@@ -75,27 +78,28 @@ function Show-ServerMenu {
 
         switch ($choice) {
             '1' {
-                Start-Companion -ScriptName "server-config\start-server.ps1" -ActionLabel "Launch Server"
+                Start-Companion -ScriptName "server-config\powershell\start-server.ps1" -ActionLabel "Launch
+                Server"
                 Write-Host "`nPress Enter to return to Server Menu..."
                 [void](Read-Host)
             }
             '2' {
-                Start-Companion -ScriptName "server-config\shutdown-server.ps1" -ActionLabel "Shutdown Server"
+                Start-Companion -ScriptName "server-config\powershell\shutdown-server.ps1" -ActionLabel "Shutdown Server"
                 Write-Host "`nPress Enter to return to Server Menu..."
                 [void](Read-Host)
             }
             '3' {
-                Start-Companion -ScriptName "server-config\restart-server.ps1" -ActionLabel "Restart Server"
+                Start-Companion -ScriptName "server-config\powershell\restart-server.ps1" -ActionLabel "Restart Server"
                 Write-Host "`nPress Enter to return to Server Menu..."
                 [void](Read-Host)
             }
             '4' {
-                Start-Companion -ScriptName "server-config\open-browser.ps1" -ActionLabel "Open Web Server"
+                Start-Companion -ScriptName "server-config\powershell\open-browser.ps1" -ActionLabel "Open Web Server"
                 Write-Host "`nPress Enter to return to Server Menu..."
                 [void](Read-Host)
             }
             '5' {
-                Start-Companion -ScriptName "server-config\show-raw-AWOS-xml.ps1" -ActionLabel "View RAW AWOS XML
+                Start-Companion -ScriptName "server-config\powershell\show-raw-AWOS-xml.ps1" -ActionLabel "View RAW AWOS XML
                 Data"
                 Write-Log -Message "Loading XML..." -Level "INFO" -Path $LauncherLog
                 Write-Host "`nPress Enter to return to Server Menu..."

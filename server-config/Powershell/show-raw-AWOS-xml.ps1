@@ -1,9 +1,10 @@
-Import-Module "$PSScriptRoot\server-config\logger.psm1"
-$loggerModulePath = Join-Path $PSScriptRoot "server-config\logger.psm1"
+$loggerModulePath = Join-Path $PSScriptRoot "..\logger.psm1"
 if (Test-Path $loggerModulePath) {
-    Import-Module $loggerModulePath -Force
-} else {
-    Write-Host "Logger module not found at $loggerModulePath" -ForegroundColor Red
+    try {
+        Import-Module $loggerModulePath -Force
+    } catch {
+        Write-Host "Failed to import logger module: $_" -ForegroundColor Red
+    }
 }
 
 
@@ -22,7 +23,7 @@ try {
     Write-Host "`n[Error] Failed to retrieve XML data." -ForegroundColor Red
     try {
         Write-Log -Message "Failed to retrieve XML data" -Level "ERROR" -Path $LauncherLog
-        Write-Log -Message "Failed to retrieve XML data" -Level "ERROR" -Path $ErrorLog
+        Write-Log -Message "Failed to retrieve XML data" -Level "ERROR" -Path $psErrorLog
     } catch {
         Write-Host "Logging failed." -ForegroundColor DarkRed
     }

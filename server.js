@@ -15,6 +15,14 @@ const AWC_BASE =
 
 let tafCache = { station: 'CYTR', data: null, fetchedAt: 0 };
 let awosCache = {};
+const awosHistory = [];
+const MAX_HISTORY = 24;
+const autoRefreshEnabled = true;
+
+function storeReport(report) {
+  if (awosHistory.length >= MAX_HISTORY) awosHistory.shift();
+  awosHistory.push(report);
+}
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -147,6 +155,7 @@ function parseWindVariabilityFromMetar(metar) {
     } catch {}
     return '--';
 }
+
 async function fetchAWOSData(){
     try {
         const session = axios.create({
@@ -303,18 +312,20 @@ async function fetchAWOSData(){
         };
 
         awosCache.rawXml = rawXml;
+        storeReport({ ...awosCache });
         console.log(`AWOS updated at ${awosCache.serverTime}`);
     } catch (err) {
         console.error('Error updating AWOS:', err.message);
     }
 }
 
-setInterval(fetchAWOSData, 60000); // Refresh every 30 secs
+setInterval(fetchAWOSData, 60000); // Refresh every 60 secs
 
 setInterval(() => warmTaf().catch(()=>{}), 10 * 60 * 1000);
 
 fetchAWOSData();
 warmTaf().catch(()=>{});
+
 
 app.get('/latest-awos', async (req, res) => {
   try {
@@ -369,6 +380,10 @@ app.get('/raw-xml', (req, res) => {
     } else {
         res.status(503).send('Raw XML not yet available');
     }
+});
+app.get('/awos-history', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(awosHistory);
 });
 
 app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));

@@ -24,6 +24,41 @@
     <h1>AWOS Weather Station — <span id="station-id">--</span></h1>
     <p id="header-line-1">Elevation: <span id="elev-m">--</span> | Lat: <span id="lat-dms">--</span> | Long: <span id="long-dms">--</span></p>
     <p id="header-line-2">Server Time: <span id="server-time">--</span> | Report Time: <span id="report-time">--</span></p>
+
+    <div id="report-nav-controls" style="margin-top: 24px;">
+        <div style="display: flex; justify-content: center; position: relative;">
+            <!-- Button Group Container -->
+            <div id="nav-buttons" style="display: flex; gap: 8px; position: relative;">
+                <button id="firstReport" class="ghost">⏮️ First</button>
+                <button id="prevReport" class="ghost">◀️ Prev</button>
+                <button id="pauseReport" class="ghost">⏸️ Pause</button>
+                <button id="nextReport" class="ghost">▶️ Next</button>
+                <button id="lastReport" class="ghost">⏭️ Latest</button>
+
+                <!-- Checkbox pinned to right of button group -->
+                <label style="position: absolute; right: -220px; top: 50%; transform: translateY(-50%); white-space:
+                nowrap; background-color: aquamarine; padding: 4px 8px; border-radius: 4px;">
+                    <input type="checkbox" id="filter-new-only" />
+                    Show only new reports
+                </label>
+            </div>
+        </div>
+
+        <!-- Status Line Centered Below -->
+        <div style="text-align: center; font-weight: bold; margin-top: 8px;">
+            <span id="report-index">
+                Viewing report <span id="report-number">--</span> of <span id="report-total">--</span> |
+                Time: <span id="report-time-label">--</span> |
+                 <span id="report-status" class="status-unchanged">--</span>
+            </span>
+        </div>
+    </div>
+
+
+
+
+
+
 </header>
 
 <main class="grid">

@@ -1,4 +1,12 @@
-Import-Module "$PSScriptRoot\logger.psm1"
+$loggerModulePath = Join-Path $PSScriptRoot "..\logger.psm1"
+if (Test-Path $loggerModulePath) {
+    try {
+        Import-Module $loggerModulePath -Force
+    } catch {
+        Write-Host "Failed to import logger module: $_" -ForegroundColor Red
+    }
+}
+
 
 $port = 3000
 Write-Log -Message "Shutdown initiated" -Path $ShutdownLog
@@ -18,7 +26,7 @@ try {
     $proc_id = Get-NetTCPConnection -LocalPort $port -ErrorAction Stop | Select-Object -ExpandProperty OwningProcess
     if ($proc_id) {
         Write-Host "[ACTION] Killing lingering process on port $port (PID: $proc_id)" -ForegroundColor Yellow
-        Write-Log -Message "Port still open. Attempting to close port $port and kill process (PID: $proc_id)" -Level "ERROR" -Path $ErrorLog
+        Write-Log -Message "Port still open. Attempting to close port $port and kill process (PID: $proc_id)" -Level "ERROR" -Path $psErrorLog
         Write-Log -Message "Port still open. Attempting to close port $port and kill process (PID: $proc_id)" -Level "ERROR" -Path $ServerLog
         Stop-Process -Id $proc_id -Force -ErrorAction SilentlyContinue
     }
@@ -37,7 +45,7 @@ $portInUse = Get-NetTCPConnection -State Listen | Where-Object { $_.LocalPort -e
 if ($portInUse) {
     Add-Content -Path $errorLog -Value "$(Get-Date) - ERROR: Port still in use"
     Write-Host "[WARNING] Port $port is still in use. Something may be stuck." -ForegroundColor Yellow
-    Write-Log -Message "Port $port is still in use. Something may be stuck." -Level "ERROR" -Path $ErrorLog
+    Write-Log -Message "Port $port is still in use. Something may be stuck." -Level "ERROR" -Path $psErrorLog
     Write-Log -Message "Port $port is still in use. Something may be stuck." -Level "ERROR" -Path $ServerLog
 } else {
     Write-Host " "
