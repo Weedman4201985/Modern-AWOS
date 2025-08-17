@@ -1,0 +1,92 @@
+package MetManager::conditions::simple;
+
+use strict;
+use warnings;
+use MetManager;
+use MetManager::conditions;
+use Graphics::Magick;
+use Locale::TextDomain("MetManager-perl", MetManager::dir("mm_localedir"));
+use Data::Dumper;
+use gytr;
+
+require Exporter;
+require DynaLoader;
+
+our @ISA = qw(Exporter DynaLoader);
+
+# Items to export into callers namespace by default. Note: do not export
+# names by default without a very good reason. Use EXPORT_OK instead.
+# Do not simply export all your public functions/methods/constants.
+
+# This allows declaration use MetManager::impact::matrix ':all';
+# If you do not need this, moving things directly into @EXPORT or @EXPORT_OK
+# will save memory.
+our %EXPORT_TAGS = ( 'all' => [ qw(
+) ] );
+
+our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
+
+our @EXPORT;
+
+our $TRACEID = 'CONDITIONS';
+
+sub create_icon {
+   my ($icon_data, $img_params) = @_;
+   return () unless defined $icon_data->{simple};
+
+   my @images = split(',', $icon_data->{simple});
+	my $source = $icon_data->{simple_source};
+	my $img_dir = MetManager::dir('data')."/images/$source/";
+	my $icon_dim = 35;
+   $icon_dim = int($img_params->{dim_factor}) if defined $img_params->{dim_factor};
+   my $type = $icon_data->{type};
+
+   my $fill_color = $img_params->{fill_color};
+	$fill_color = 'black' unless defined $fill_color;
+
+	my $param_str;
+	for my $key (keys %{$img_params}) {
+		if ($key eq 'fill_color' || $key eq 'dim_factor' || $key eq 'stack'){
+			next;
+		}
+
+		if (defined $param_str){
+			$param_str .= " $key=\"" . $img_params->{$key} . "\"";
+		} else {
+			$param_str = "$key=\"" . $img_params->{$key} . "\"";
+		}
+	}
+
+	MetManager::trace($TRACEID, 7, "gathering blobs for icon $type");
+	my @blobs;
+   for (my $i = 0; $i < scalar @images; $i++){
+		open(my $svg, '<', $img_dir . $images[$i]) or next;
+		my $blob = do {local $/; <$svg>};
+		close($svg);	
+		
+		# Make sure the SVG fill parameter is not current color otherwise the path 
+		# will be the same color as the background
+		$blob =~ s/currentColor/$fill_color/g;
+		if (defined $param_str){
+         $blob =~ s/class/$param_str class/g;
+      }
+		# Bootstrap icons uses 16 as height and width. Change to calculated value
+		$blob =~ s/"16"/"$icon_dim"/g;
+		push @blobs, $blob;
+	}
+
+	return undef unless scalar @blobs > 0;
+	
+	MetManager::trace($TRACEID, 7, "creating icon image for $type");
+	my $icon = Graphics::Magick->new(magick => 'svg');
+	$icon->BlobToImage(@blobs);
+	# Tell Magick that any whitespace is to be treated as transparent
+	$icon->Transparent("white");
+	my $stack = "false";
+	$stack = $img_params->{stack} if defined $img_params->{stack};
+	my $img = gytr::image->fromMagick($icon->Append(stack=>$stack));
+
+   return $img;
+}
+
+1;
