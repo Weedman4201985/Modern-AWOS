@@ -1,3 +1,5 @@
+const ensureLogsExist = require('./server-config/ensureLogsExist.js');
+ensureLogsExist();
 require('./server-config/logger.js');// This overrides console methods
 
 const express = require('express');
@@ -11,17 +13,12 @@ const PORT = 3000;
 const TAF_TTL_MS = 5 * 60 * 1000;
 const AWC_BASE =
     'https://aviationweather.gov/adds/dataserver_current/httpparam';
+const MAX_HISTORY = 24;
+const autoRefreshEnabled = true;
+const awosHistory = [];
 
 let tafCache = { station: 'CYTR', data: null, fetchedAt: 0 };
 let awosCache = {};
-const awosHistory = [];
-const MAX_HISTORY = 24;
-const autoRefreshEnabled = true;
-
-function storeReport(report) {
-  if (awosHistory.length >= MAX_HISTORY) awosHistory.shift();
-  awosHistory.push(report);
-}
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -30,69 +27,12 @@ const fetchJSON = async (url) => {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
 };
-const fetchText = async (url) => {
-    const res = await fetch(url, { headers: { 'User-Agent': UA } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.text();
-};
 const parseTgftp = (body) => {
     const lines = body.trim().split(/\r?\n/).filter(Boolean);
     const issued = lines.shift();
     const raw = lines.join(' ').replace(/\b(FM\d{6}|BECMG|TEMPO|PROB30|PROB40|RMK)\b/g, '\n$1');
     return { raw: raw.trim(), issued };
 };
-async function getWx(station) {
-  const s = station.toUpperCase();
-  try {
-    const url = `https://aviationweather.gov/api/data/metar?ids=${s}&hours=0&order=id%2C-obs&sep=true&taf=true`;
-    const rawText = await fetchText(url);
-
-    const [metarRaw, tafRaw] = rawText.split(new RegExp(`\\bTAF\\s+${s}\\b`, 'i'));
-    const metarIssued = metarRaw.match(/\b\d{6}Z\b/)?.[0] || '--';
-    const tafIssued = tafRaw?.match(/\b\d{6}Z\b/)?.[0] || '--';
-
-    return {
-      metar: { raw: metarRaw.trim(), issued: metarIssued },
-      taf: tafRaw
-        ? { raw: `TAF ${s} ${tafRaw.trim()}`, issued: tafIssued }
-        : { raw: 'TAF not available', issued: '--', _source: 'AWC (error)' }
-    };
-  } catch (err) {
-    console.error('Unified METAR/TAF fetch failed:', err.message);
-    return {
-      metar: { raw: '--', issued: '--' },
-      taf: { raw: 'TAF not available', issued: '--', _source: 'AWC (error)' }
-    };
-  }
-}
-async function upsertAwcMetarTaf(cache) {
-  try {
-    const wx = await getWx('CYTR'); // returns { metar, taf }
-    cache.official ??= {};
-    cache.official.metar = wx.metar;
-    cache.official.taf = wx.taf;
-  } catch (err) {
-    console.error('AWOS patch error:', err.message);
-  }
-}
-async function fetchLatestTaf(station = 'CYTR') {
-    const url = `${AWC_BASE}?datasource=tafs&requestType=retrieve&format=JSON&mostRecent=true&hoursBeforeNow=24&stationString=${encodeURIComponent(station)}`;
-
-    const res = await fetch(url, { headers: { accept: 'application/json' } });
-    if (!res.ok) throw new Error(`AWC TAF fetch failed: ${res.status}`);
-    const json = await res.json();
-
-    const taf = json?.data?.TAF?.[0];
-    if (!taf?.raw_text) throw new Error('No TAF in AWC response');
-
-    return {
-        raw: formatTaf(taf.raw_text),
-        issued: toZulu(taf.issue_time || taf.bulletin_time || taf.recv_time),
-        validFrom: toZulu(taf.valid_time_from),
-        validTo: toZulu(taf.valid_time_to),
-        _source: 'AWC',
-    };
-}
 async function getCachedTaf(station = 'CYTR') {
     const now = Date.now();
     const fresh = tafCache.data && (now - tafCache.fetchedAt) < TAF_TTL_MS && tafCache.station === station;
@@ -109,21 +49,12 @@ async function getCachedTaf(station = 'CYTR') {
         return { raw: 'TAF not available', issued: undefined, _source: 'AWC (error)' };
     }
 }
-async function warmTaf() { tafCache.data = await fetchLatestTaf(tafCache.station); tafCache.fetchedAt = Date.now(); }
-function formatTaf(raw) {
-    // Add line breaks for readability in your modal
-    return raw
-        .replace(/\s+/g, ' ') // normalize spacing
-        .replace(/\b(BECMG|TEMPO|PROB\d{2}|FM\d{6})\b/g, '\n$1')
-        .replace(/\s+RMK\s+/g, '\nRMK ');
-}
-function toZulu(s) {
-    if (!s) return undefined;
-    const d = new Date(s);
-    if (isNaN(d)) return s;
-    // Example: 2025-08-10 05:00Z
-    return d.toISOString().replace('T', ' ').slice(0, 16) + 'Z';
-}
+
+const fetchText = async (url) => {
+    const res = await fetch(url, { headers: { 'User-Agent': UA } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.text();
+};
 function calculateHumidex(tempC, dewPointC) {
     try {
         const e = 6.11 * Math.pow(10, (7.5 * dewPointC) / (237.7 + dewPointC));
@@ -153,6 +84,78 @@ function parseWindVariabilityFromMetar(metar) {
         if (m) return `${m[1]}° to ${m[2]}°`;
     } catch {}
     return '--';
+}
+function toZulu(s) {
+    if (!s) return undefined;
+    const d = new Date(s);
+    if (isNaN(d)) return s;
+    // Example: 2025-08-10 05:00Z
+    return d.toISOString().replace('T', ' ').slice(0, 16) + 'Z';
+}
+
+async function getWx(station) {
+    const s = station.toUpperCase();
+    try {
+        const url = `https://aviationweather.gov/api/data/metar?ids=${s}&hours=0&order=id%2C-obs&sep=true&taf=true`;
+        const rawText = await fetchText(url);
+
+        const [metarRaw, tafRaw] = rawText.split(new RegExp(`\\bTAF\\s+${s}\\b`, 'i'));
+        const metarIssued = metarRaw.match(/\b\d{6}Z\b/)?.[0] || '--';
+        const tafIssued = tafRaw?.match(/\b\d{6}Z\b/)?.[0] || '--';
+
+        return {
+            metar: { raw: metarRaw.trim(), issued: metarIssued },
+            taf: tafRaw
+                ? { raw: `TAF ${s} ${tafRaw.trim()}`, issued: tafIssued }
+                : { raw: 'TAF not available', issued: '--', _source: 'AWC (error)' }
+        };
+    } catch (err) {
+        console.error('Unified METAR/TAF fetch failed:', err.message);
+        return {
+            metar: { raw: '--', issued: '--' },
+            taf: { raw: 'TAF not available', issued: '--', _source: 'AWC (error)' }
+        };
+    }
+}
+async function upsertAwcMetarTaf(cache) {
+  try {
+    const wx = await getWx('CYTR'); // returns { metar, taf }
+    cache.official ??= {};
+    cache.official.metar = wx.metar;
+    cache.official.taf = wx.taf;
+  } catch (err) {
+    console.error('AWOS patch error:', err.message);
+  }
+}
+async function fetchLatestTaf(station = 'CYTR') {
+    const url = `${AWC_BASE}?datasource=tafs&requestType=retrieve&format=JSON&mostRecent=true&hoursBeforeNow=24&stationString=${encodeURIComponent(station)}`;
+
+    const res = await fetch(url, { headers: { accept: 'application/json' } });
+    if (!res.ok) throw new Error(`AWC TAF fetch failed: ${res.status}`);
+    const json = await res.json();
+
+    const taf = json?.data?.TAF?.[0];
+    if (!taf?.raw_text) throw new Error('No TAF in AWC response');
+
+    return {
+        raw: formatTaf(taf.raw_text),
+        issued: toZulu(taf.issue_time || taf.bulletin_time || taf.recv_time),
+        validFrom: toZulu(taf.valid_time_from),
+        validTo: toZulu(taf.valid_time_to),
+        _source: 'AWC',
+    };
+}
+async function warmTaf() { tafCache.data = await fetchLatestTaf(tafCache.station); tafCache.fetchedAt = Date.now(); }
+function formatTaf(raw) {
+    // Add line breaks for readability in your modal
+    return raw
+        .replace(/\s+/g, ' ') // normalize spacing
+        .replace(/\b(BECMG|TEMPO|PROB\d{2}|FM\d{6})\b/g, '\n$1')
+        .replace(/\s+RMK\s+/g, '\nRMK ');
+}
+function storeReport(report) {
+    if (awosHistory.length >= MAX_HISTORY) awosHistory.shift();
+    awosHistory.push(report);
 }
 
 async function fetchAWOSData(){
@@ -319,12 +322,10 @@ async function fetchAWOSData(){
 }
 
 setInterval(fetchAWOSData, 60000); // Refresh every 60 secs
-
 setInterval(() => warmTaf().catch(()=>{}), 10 * 60 * 1000);
 
 fetchAWOSData();
 warmTaf().catch(()=>{});
-
 
 app.get('/latest-awos', async (req, res) => {
   try {

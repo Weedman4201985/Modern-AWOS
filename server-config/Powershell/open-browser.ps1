@@ -7,7 +7,6 @@ if (Test-Path $loggerModulePath) {
     }
 }
 
-
 # Define URLs
 $urls = @(
     "http://localhost:3000",

@@ -5,9 +5,12 @@
       <excludeFolder url="file://$MODULE_DIR$/.tmp" />
       <excludeFolder url="file://$MODULE_DIR$/temp" />
       <excludeFolder url="file://$MODULE_DIR$/tmp" />
+      <excludeFolder url="file://$MODULE_DIR$/resources/Script text files" />
+      <excludeFolder url="file://$MODULE_DIR$/resources/screenshots" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="library" name="prism" level="application" />
     <orderEntry type="library" name="prism" level="application" />
   </component>
 </module>

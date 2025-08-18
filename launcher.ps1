@@ -1,6 +1,5 @@
-Import-Module $PSScriptRoot "server-config\logger.psm1"
-
-$loggerModulePath = Join-Path $PSScriptRoot "server-config\logger.psm1"
+$loggerPath = Join-Path $PSScriptRoot "server-config\logger.psm1"
+Import-Module $loggerPath
 if (Test-Path $loggerModulePath) {
     try {
         Import-Module $loggerModulePath -Force
@@ -8,8 +7,8 @@ if (Test-Path $loggerModulePath) {
         Write-Host "Failed to import logger module: $_" -ForegroundColor Red
     }
 }
-
 $scriptPath = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $PSCommandPath }
+
 
 function Get-ServerStatus {
     param (
@@ -181,7 +180,10 @@ function Start-Companion {
     }
     Write-Log -Message "Running action: $ActionLabel" -Path $LauncherLog
     Write-Host "[Launching] $ActionLabel..." -ForegroundColor Yellow
-    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$fullPath`""
+    $pwshPath = "C:\Program Files\PowerShell\7\pwsh.exe"
+    Start-Process $pwshPath -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$fullPath`""
+
+
 }
 
 function Show-RawXML {

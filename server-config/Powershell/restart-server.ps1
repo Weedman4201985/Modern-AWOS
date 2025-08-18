@@ -11,7 +11,6 @@ if (Test-Path $loggerModulePath) {
 $nodeProcess = Get-Process -Name "node" -ErrorAction SilentlyContinue
 Write-Log -Message "Restart Initated" -Level "INFO" -Path $ServerLog
 
-
 if ($nodeProcess) {
     Write-Host "[INFO] Node.js process found. Terminating..." -ForegroundColor Yellow
     Stop-Process -Name "node" -Force

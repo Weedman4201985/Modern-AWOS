@@ -1,4 +1,5 @@
 $loggerModulePath = Join-Path $PSScriptRoot "..\logger.psm1"
+
 if (Test-Path $loggerModulePath) {
     try {
         Import-Module $loggerModulePath -Force
@@ -8,7 +9,7 @@ if (Test-Path $loggerModulePath) {
 }
 
 # Set project path
-$projectPath = "D:\Work Projects\MET\awos-modern2"
+$projectPath = $PSScriptRoot
 
 # Check if directory exists
 if (Test-Path $projectPath) {

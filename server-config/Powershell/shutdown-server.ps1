@@ -7,11 +7,9 @@ if (Test-Path $loggerModulePath) {
     }
 }
 
-
 $port = 3000
 Write-Log -Message "Shutdown initiated" -Path $ShutdownLog
 Write-Log -Message "Shutdown initiated" -Path $ServerLog
-
 
 Write-Host "------ Nightly shutdown initiated... ------" -ForegroundColor Blue
 Write-Host " "

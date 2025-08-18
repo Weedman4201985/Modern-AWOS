@@ -1,4 +1,4 @@
-$Global:LogDir = "D:\Work Projects\MET\awos-modern2\logs"
+$Global:LogDir = "C:\Work Projects\Modern AWOS\logs"
 $Global:ServerLog   = Join-Path $LogDir "server.log"
 $Global:psErrorLog    = Join-Path $LogDir "error-powershell.log"
 $Global:nodeErrorLog    = Join-Path $LogDir "error-node.log"
